@@ -9,13 +9,11 @@ import { canvasToJpeg, coverCrop } from "@/lib/lut/renderer";
 import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
-import { layoutOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
 import {
   decodeStillLikeVideo,
   previewOutputSize,
   rasterizePreviewStill,
 } from "@/lib/camera/preview-still";
-import type { ResolvedOrientation } from "@/lib/frames/film";
 import { buildStillOptions } from "@/lib/camera/still-options";
 import { exposureSummary } from "@/lib/camera/summary";
 import { shutterById } from "@/lib/camera/stops";
@@ -90,7 +88,6 @@ export function CameraShell() {
   const [levelPermission, setLevelPermission] = useState<"unknown" | "needed" | "granted" | "denied">("unknown");
   const cancelTimer = useRef(false);
   const shooting = useRef(false);
-  const previewFacingRef = useRef<ResolvedOrientation>(layoutOrientation());
   const keyActions = useRef({
     shutter: () => {},
     grid: () => {},
@@ -209,17 +206,12 @@ export function CameraShell() {
     if (!camera.probe || !lut) throw new Error("The camera is not ready.");
     const stillOptions = buildStillOptions(settings, camera.probe);
     const original = await camera.captureOriginal(stillOptions);
-    // Match native phone cameras / Redmi watermark: bake the same upright crop the live preview shows.
-    // Do not re-orient via EXIF heuristics — that fights the sensor-fixed preview.
+    // Portrait frames only for now: bake the same crop as the live portrait preview window.
     const viewCanvas = view.canvasRef.current;
     const video = camera.videoRef.current;
     const previewWidth = Math.max(2, viewCanvas?.clientWidth || window.innerWidth);
     const previewHeight = Math.max(2, viewCanvas?.clientHeight || window.innerHeight);
-    const printOrientation = resolveCaptureOrientation(
-      settings.frameOrientation,
-      previewFacingRef.current,
-      viewCanvas,
-    );
+    const printOrientation = "portrait" as const;
     let graded: Blob;
     let gradedNote: string;
     let stillWidth = original.width;
@@ -248,8 +240,7 @@ export function CameraShell() {
         });
         stillWidth = out.width;
         stillHeight = out.height;
-        gradedNote =
-          "Graded JPEG matching the live preview crop and orientation. This is not a RAW file.";
+        gradedNote = "Graded JPEG matching the live preview crop. This is not a RAW file.";
       }
     } finally {
       bitmap.close();
@@ -257,7 +248,7 @@ export function CameraShell() {
     if (settings.frameId !== "none") {
       graded = await applyFilmFrame(graded, settings.frameId, printOrientation);
       const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
-      gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${printOrientation} orientation.`;
+      gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture.`;
     }
     const framed = settings.frameId !== "none";
     const thumbnail = await downscaleJpeg(graded);
@@ -480,9 +471,7 @@ export function CameraShell() {
     >
       <AspectPreview
         frameId={settings.captureMode === "photo" ? settings.frameId : "none"}
-        orientation={settings.frameOrientation}
         clearChrome={chrome}
-        previewFacingRef={previewFacingRef}
       >
         <div className="absolute inset-0" onPointerDown={onViewTap}>
           <video
@@ -674,12 +663,7 @@ export function CameraShell() {
             </button>
           </div>
           <div className="pb-3">
-            <FramePicker
-              frameId={settings.frameId}
-              orientation={settings.frameOrientation}
-              onFrame={(frameId) => store.update({ frameId })}
-              onOrientation={(frameOrientation) => store.update({ frameOrientation })}
-            />
+            <FramePicker frameId={settings.frameId} onFrame={(frameId) => store.update({ frameId })} />
             <LutCarousel
               luts={luts}
               settings={settings}

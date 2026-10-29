@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { frameLayout, imageWindowAspect, resolveOrientation } from "./film";
 
 describe("film frames", () => {
-  it("follows the photo aspect unless portrait or landscape is chosen", () => {
-    expect(resolveOrientation("auto", 1280, 720)).toBe("landscape");
+  it("uses portrait for Auto and keeps legacy landscape prints", () => {
+    expect(resolveOrientation("auto", 1280, 720)).toBe("portrait");
     expect(resolveOrientation("auto", 720, 1280)).toBe("portrait");
     expect(resolveOrientation("portrait", 1280, 720)).toBe("portrait");
     expect(resolveOrientation("landscape", 720, 1280)).toBe("landscape");

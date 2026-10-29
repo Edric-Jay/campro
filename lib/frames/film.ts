@@ -41,9 +41,10 @@ export function isFrameOrientation(value: string): value is FrameOrientation {
   return ORIENTATION_SET.has(value);
 }
 
-export function resolveOrientation(orientation: FrameOrientation, width: number, height: number): ResolvedOrientation {
-  if (orientation === "portrait" || orientation === "landscape") return orientation;
-  return width >= height ? "landscape" : "portrait";
+export function resolveOrientation(orientation: FrameOrientation, _width = 0, _height = 0): ResolvedOrientation {
+  // Landscape capture is disabled for now. Legacy landscape prints still resolve correctly.
+  if (orientation === "landscape") return "landscape";
+  return "portrait";
 }
 
 /** Aspect of the printable image window (W/H), without the paper border. */

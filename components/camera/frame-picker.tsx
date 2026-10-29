@@ -1,47 +1,22 @@
 "use client";
 
-import { FRAMES, type FrameId, type FrameOrientation } from "@/lib/frames/film";
-
-const ORIENTATIONS: { id: FrameOrientation; label: string }[] = [
-  { id: "auto", label: "Auto" },
-  { id: "portrait", label: "Portrait" },
-  { id: "landscape", label: "Landscape" },
-];
+import { FRAMES, type FrameId } from "@/lib/frames/film";
 
 export function FramePicker({
   frameId,
-  orientation,
   onFrame,
-  onOrientation,
 }: {
   frameId: FrameId;
-  orientation: FrameOrientation;
   onFrame: (id: FrameId) => void;
-  onOrientation: (orientation: FrameOrientation) => void;
 }) {
   return (
     <div className="flex flex-col gap-2.5 px-3">
-      <div className="flex items-center justify-between gap-2">
+      <div>
         <p className="font-mono text-[10px] tracking-[0.16em] text-paper/55 uppercase">Frame</p>
-        <div className="flex gap-1">
-          {ORIENTATIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={orientation === option.id}
-              className={`min-h-8 rounded-full border px-2.5 font-mono text-[10px] tracking-widest uppercase ${
-                orientation === option.id ? "border-sage bg-paper text-ink" : "border-paper/15 text-paper"
-              }`}
-              onClick={() => onOrientation(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <p className="mt-1 text-[11px] leading-snug text-paper/45">
+          Portrait print frames. The preview matches the photo window; the border is added after capture.
+        </p>
       </div>
-      <p className="text-[11px] leading-snug text-paper/45">
-        Captures match the live preview as you rotate the phone, like a stock camera. Auto uses that orientation. Portrait or Landscape locks only the saved print shape.
-      </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FRAMES.map((frame) => (
           <button
