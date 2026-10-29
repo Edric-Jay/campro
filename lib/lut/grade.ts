@@ -128,6 +128,50 @@ export function sampleLut(lut: Pick<Lut3D, "data" | "size">, rgb: Rgb): Rgb {
   return mix(mix(c00, c10, ty), mix(c01, c11, ty), tz);
 }
 
+function mix3(a: Rgb, b: Rgb, t: number): Rgb {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+function scale3(rgb: Rgb, gain: Rgb): Rgb {
+  return [rgb[0] * gain[0], rgb[1] * gain[1], rgb[2] * gain[2]];
+}
+
+/** Same branches as the live preview shader, so the look cards match the camera. */
+export function gradeBuiltinColor(rgb: Rgb, look: number): Rgb {
+  const l = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+  const luma: Rgb = [l, l, l];
+  const contrast = (value: Rgb, amount: number, pivot = 0.5): Rgb => [
+    (value[0] - 0.5) * amount + pivot,
+    (value[1] - 0.5) * amount + pivot,
+    (value[2] - 0.5) * amount + pivot,
+  ];
+  let result = rgb;
+  if (look < 0.5) result = contrast(rgb, 1.06);
+  else if (look < 1.5) result = contrast(scale3(rgb, [1.08, 1.02, 0.94]), 1.08);
+  else if (look < 2.5) {
+    result = scale3(rgb, [1.14, 1.02, 0.84]);
+    result = [
+      result[0] + 0.045 * l - 0.03 * (1 - l),
+      result[1] + 0.012 * l + 0.02 * (1 - l),
+      result[2] - 0.03 * l + 0.06 * (1 - l),
+    ];
+  } else if (look < 3.5) result = contrast(scale3(rgb, [0.9, 0.98, 1.16]), 1.16, 0.48);
+  else if (look < 4.5) {
+    result = scale3(rgb, [0.92, 1, 1.12]);
+    result = [result[0] - 0.01, result[1] + 0.01, result[2] + 0.03];
+  } else if (look < 5.5) result = mix3(contrast(rgb, 0.75, 0.56), luma, 0.28);
+  else if (look < 6.5) result = contrast(scale3(rgb, [1.12, 1.03, 0.86]), 0.9, 0.52);
+  else if (look < 7.5) result = contrast(scale3(rgb, [0.94, 1.1, 0.9]), 0.88, 0.53);
+  else if (look < 8.5) result = contrast(scale3(rgb, [1.08, 1, 0.92]), 0.92, 0.51);
+  else if (look < 9.5) result = contrast(scale3(rgb, [1.05, 1.01, 0.95]), 0.86, 0.52);
+  else if (look < 10.5) result = mix3(luma, contrast(rgb, 1.32), 0.4);
+  else {
+    const g = clamp01((l - 0.5) * 1.15 + 0.5);
+    result = [g, g, g];
+  }
+  return [clamp01(result[0]), clamp01(result[1]), clamp01(result[2])];
+}
+
 export function gradeSample(lut: Pick<Lut3D, "data" | "size">, rgb: Rgb, intensity: number): Rgb {
   return mixRgbSafe(rgb, sampleLut(lut, rgb), intensity);
 }

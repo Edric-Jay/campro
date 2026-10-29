@@ -3,8 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { LOOKS } from "@/lib/lut/builtin";
 import type { Rgb } from "@/lib/lut/color";
-import { gradeSample, type Lut3D } from "@/lib/lut/grade";
+import { gradeBuiltinColor, gradeSample, type Lut3D } from "@/lib/lut/grade";
 import type { AppSettings } from "@/lib/storage/settings";
+
+const BUILTIN_LOOK_INDEX: Record<string, number> = {
+  natural: 0,
+  cinema: 1,
+  "golden-teal": 2,
+  "deep-blue": 3,
+  "clean-blue": 4,
+  "faded-film": 5,
+  "warm-film": 6,
+  "soft-film": 7,
+  portrait: 8,
+  "cinema-soft": 9,
+  "bleach-bypass": 10,
+  monochrome: 11,
+};
 
 const PREVIEW_WIDTH = 120;
 const PREVIEW_HEIGHT = 80;
@@ -34,7 +49,9 @@ function thumb(lut: Lut3D) {
   const image = context.createImageData(PREVIEW_WIDTH, PREVIEW_HEIGHT);
   for (let y = 0; y < PREVIEW_HEIGHT; y += 1) {
     for (let x = 0; x < PREVIEW_WIDTH; x += 1) {
-      const graded = gradeSample(lut, sceneColor(x, y), 1);
+      const source = sceneColor(x, y);
+      const look = BUILTIN_LOOK_INDEX[lut.id];
+      const graded = look == null ? gradeSample(lut, source, 1) : gradeBuiltinColor(source, look);
       const index = (y * PREVIEW_WIDTH + x) * 4;
       image.data[index] = graded[0] * 255;
       image.data[index + 1] = graded[1] * 255;

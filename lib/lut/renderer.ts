@@ -10,38 +10,20 @@ export interface DrawState {
   crop: { u0: number; v0: number; u1: number; v1: number };
 }
 
-const VERT_2 = `#version 300 es
-in vec2 aPosition;
-out vec2 vUv;
-void main() {
-  vUv = aPosition * 0.5 + 0.5;
-  gl_Position = vec4(aPosition, 0.0, 1.0);
-}`;
-
-function frag2(samplerPrecision: "highp" | "mediump") {
-  return `#version 300 es
-precision highp float;
-precision ${samplerPrecision} sampler2D;
-precision ${samplerPrecision} sampler3D;
-uniform sampler2D uVideo;
-uniform sampler3D uLut;
-uniform vec4 uCrop;
-uniform float uIntensity;
-uniform vec3 uWbGains;
-uniform float uLutSize;
-in vec2 vUv;
-out vec4 outColor;
-void main() {
-  vec2 uv = mix(uCrop.xy, uCrop.zw, vUv);
-  vec3 color = texture(uVideo, uv).rgb;
-  color = clamp(color * uWbGains, 0.0, 1.0);
-  float size = max(uLutSize, 2.0);
-  vec3 coord = (color * (size - 1.0) + 0.5) / size;
-  vec3 graded = texture(uLut, coord).rgb;
-  color = mix(color, graded, clamp(uIntensity, 0.0, 1.0));
-  outColor = vec4(color, 1.0);
-}`;
-}
+const BUILTIN_LOOK_INDEX: Record<string, number> = {
+  natural: 0,
+  cinema: 1,
+  "golden-teal": 2,
+  "deep-blue": 3,
+  "clean-blue": 4,
+  "faded-film": 5,
+  "warm-film": 6,
+  "soft-film": 7,
+  portrait: 8,
+  "cinema-soft": 9,
+  "bleach-bypass": 10,
+  monochrome: 11,
+};
 
 const VERT_1 = `
 attribute vec2 aPosition;
@@ -52,13 +34,14 @@ void main() {
 }`;
 
 const FRAG_1 = `
-precision highp float;
+precision mediump float;
 uniform sampler2D uVideo;
 uniform sampler2D uLut;
 uniform vec4 uCrop;
 uniform float uIntensity;
 uniform vec3 uWbGains;
 uniform float uLutSize;
+uniform float uLook;
 varying vec2 vUv;
 vec3 lookup(vec3 color, float size) {
   float z = clamp(color.b, 0.0, 1.0) * (size - 1.0);
@@ -72,11 +55,52 @@ vec3 lookup(vec3 color, float size) {
   vec3 b = texture2D(uLut, vec2(x1, y)).rgb;
   return mix(a, b, f);
 }
+vec3 grade(vec3 c, float look) {
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  vec3 result = c;
+  if (look < 0.5) {
+    result = (c - 0.5) * 1.06 + 0.5;
+  } else if (look < 1.5) {
+    result = c * vec3(1.08, 1.02, 0.94);
+    result = (result - 0.5) * 1.08 + 0.5;
+  } else if (look < 2.5) {
+    result = c * vec3(1.14, 1.02, 0.84);
+    result += vec3(0.045, 0.012, -0.03) * l;
+    result += vec3(-0.03, 0.02, 0.06) * (1.0 - l);
+  } else if (look < 3.5) {
+    result = c * vec3(0.9, 0.98, 1.16);
+    result = (result - 0.5) * 1.16 + 0.48;
+  } else if (look < 4.5) {
+    result = c * vec3(0.92, 1.0, 1.12);
+    result += vec3(-0.01, 0.01, 0.03);
+  } else if (look < 5.5) {
+    result = (c - 0.5) * 0.75 + 0.56;
+    result = mix(result, vec3(l), 0.28);
+  } else if (look < 6.5) {
+    result = c * vec3(1.12, 1.03, 0.86);
+    result = (result - 0.5) * 0.9 + 0.52;
+  } else if (look < 7.5) {
+    result = c * vec3(0.94, 1.1, 0.9);
+    result = (result - 0.5) * 0.88 + 0.53;
+  } else if (look < 8.5) {
+    result = c * vec3(1.08, 1.0, 0.92);
+    result = (result - 0.5) * 0.92 + 0.51;
+  } else if (look < 9.5) {
+    result = (c * vec3(1.05, 1.01, 0.95) - 0.5) * 0.86 + 0.52;
+  } else if (look < 10.5) {
+    result = (c - 0.5) * 1.32 + 0.5;
+    result = mix(vec3(l), result, 0.4);
+  } else {
+    float g = clamp((l - 0.5) * 1.15 + 0.5, 0.0, 1.0);
+    result = vec3(g);
+  }
+  return clamp(result, 0.0, 1.0);
+}
 void main() {
   vec2 uv = mix(uCrop.xy, uCrop.zw, vUv);
   vec3 color = texture2D(uVideo, uv).rgb;
   color = clamp(color * uWbGains, 0.0, 1.0);
-  vec3 graded = lookup(color, max(uLutSize, 2.0));
+  vec3 graded = uLook < 0.0 ? lookup(color, max(uLutSize, 2.0)) : grade(color, uLook);
   color = mix(color, graded, clamp(uIntensity, 0.0, 1.0));
   gl_FragColor = vec4(color, 1.0);
 }`;
@@ -115,22 +139,16 @@ const GL_ATTRIBUTES = {
   premultipliedAlpha: false,
 } as const;
 
-function createPass(canvas: HTMLCanvasElement, is2: boolean): Pass {
-  const gl = (
-    is2 ? canvas.getContext("webgl2", GL_ATTRIBUTES) : canvas.getContext("webgl", GL_ATTRIBUTES)
-  ) as GL | null;
+function lookIndex(lut: Lut3D) {
+  return BUILTIN_LOOK_INDEX[lut.id] ?? -1;
+}
+
+function createPass(canvas: HTMLCanvasElement): Pass {
+  const gl = (canvas.getContext("webgl", GL_ATTRIBUTES) ??
+    canvas.getContext("experimental-webgl", GL_ATTRIBUTES)) as GL | null;
   if (!gl) throw new Error("WebGL is unavailable.");
-  const vertex = compile(gl, gl.VERTEX_SHADER, is2 ? VERT_2 : VERT_1);
-  let fragment: WebGLShader;
-  if (!is2) {
-    fragment = compile(gl, gl.FRAGMENT_SHADER, FRAG_1);
-  } else {
-    try {
-      fragment = compile(gl, gl.FRAGMENT_SHADER, frag2("highp"));
-    } catch {
-      fragment = compile(gl, gl.FRAGMENT_SHADER, frag2("mediump"));
-    }
-  }
+  const vertex = compile(gl, gl.VERTEX_SHADER, VERT_1);
+  const fragment = compile(gl, gl.FRAGMENT_SHADER, FRAG_1);
   const program = gl.createProgram();
   if (!program) throw new Error("Could not create a program.");
   gl.attachShader(program, vertex);
@@ -153,10 +171,17 @@ function createPass(canvas: HTMLCanvasElement, is2: boolean): Pass {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  const names = ["uVideo", "uLut", "uCrop", "uIntensity", "uWbGains", "uLutSize"];
+  gl.bindTexture(gl.TEXTURE_2D, lutTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(16).fill(255));
+  const names = ["uVideo", "uLut", "uCrop", "uIntensity", "uWbGains", "uLutSize", "uLook"];
   const loc: Record<string, WebGLUniformLocation | null> = {};
   for (const name of names) loc[name] = gl.getUniformLocation(program, name);
-  return { gl, canvas, program, videoTexture, lutTexture, buffer, is2, loc };
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  return { gl, canvas, program, videoTexture, lutTexture, buffer, is2: false, loc };
 }
 
 function rgbaFromLut(lut: Lut3D) {
@@ -174,28 +199,6 @@ function uploadLut(pass: Pass, lut: Lut3D) {
   const { gl } = pass;
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   const rgba = rgbaFromLut(lut);
-  if (pass.is2) {
-    const gl2 = gl as WebGL2RenderingContext;
-    gl2.bindTexture(gl2.TEXTURE_3D, pass.lutTexture);
-    gl2.texParameteri(gl2.TEXTURE_3D, gl2.TEXTURE_MIN_FILTER, gl2.LINEAR);
-    gl2.texParameteri(gl2.TEXTURE_3D, gl2.TEXTURE_MAG_FILTER, gl2.LINEAR);
-    gl2.texParameteri(gl2.TEXTURE_3D, gl2.TEXTURE_WRAP_S, gl2.CLAMP_TO_EDGE);
-    gl2.texParameteri(gl2.TEXTURE_3D, gl2.TEXTURE_WRAP_T, gl2.CLAMP_TO_EDGE);
-    gl2.texParameteri(gl2.TEXTURE_3D, gl2.TEXTURE_WRAP_R, gl2.CLAMP_TO_EDGE);
-    gl2.texImage3D(
-      gl2.TEXTURE_3D,
-      0,
-      gl2.RGBA,
-      lut.size,
-      lut.size,
-      lut.size,
-      0,
-      gl2.RGBA,
-      gl2.UNSIGNED_BYTE,
-      rgba,
-    );
-    return;
-  }
   const size = lut.size;
   const atlas = new Uint8Array(size * size * size * 4);
   for (let blue = 0; blue < size; blue += 1) {
@@ -226,6 +229,7 @@ function drawPass(
   height: number,
   state: DrawState,
   lutSize: number,
+  look: number,
 ) {
   const { gl } = pass;
   if (pass.canvas.width !== width || pass.canvas.height !== height) {
@@ -242,8 +246,7 @@ function drawPass(
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source as TexImageSource);
   gl.activeTexture(gl.TEXTURE1);
-  if (pass.is2) gl.bindTexture((gl as WebGL2RenderingContext).TEXTURE_3D, pass.lutTexture);
-  else gl.bindTexture(gl.TEXTURE_2D, pass.lutTexture);
+  gl.bindTexture(gl.TEXTURE_2D, pass.lutTexture);
   const u0 = state.mirror ? state.crop.u1 : state.crop.u0;
   const u1 = state.mirror ? state.crop.u0 : state.crop.u1;
   gl.uniform1i(pass.loc.uVideo, 0);
@@ -252,6 +255,7 @@ function drawPass(
   gl.uniform1f(pass.loc.uIntensity, state.intensity);
   gl.uniform3f(pass.loc.uWbGains, state.wbGains[0], state.wbGains[1], state.wbGains[2]);
   gl.uniform1f(pass.loc.uLutSize, lutSize);
+  gl.uniform1f(pass.loc.uLook, look);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
@@ -293,12 +297,7 @@ export class LutRenderer {
   private sampleCanvas: HTMLCanvasElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
-    if (canvas.getContext("webgl2", GL_ATTRIBUTES)) {
-      this.view = createPass(canvas, true);
-      this.kind = "webgl2";
-      return;
-    }
-    this.view = createPass(canvas, false);
+    this.view = createPass(canvas);
     this.kind = "webgl1";
   }
 
@@ -314,7 +313,7 @@ export class LutRenderer {
     const width = Math.max(2, Math.round(this.view.canvas.clientWidth * dpr));
     const height = Math.max(2, Math.round(this.view.canvas.clientHeight * dpr));
     if (this.view.canvas.clientWidth < 2 || this.view.canvas.clientHeight < 2) return;
-    drawPass(this.view, video, width, height, state, this.lut.size);
+    drawPass(this.view, video, width, height, state, this.lut.size, lookIndex(this.lut));
   }
 
   readAnalysis() {
@@ -342,7 +341,7 @@ export class LutRenderer {
   async gradeSource(source: CanvasImageSource, width: number, height: number, state: DrawState) {
     if (!this.view || !this.lut) throw new Error("The look could not be applied.");
     if (!this.exporter) {
-      this.exporter = createPass(document.createElement("canvas"), this.view.is2);
+      this.exporter = createPass(document.createElement("canvas"));
       uploadLut(this.exporter, this.lut);
     }
     // ImageBitmap uploads ignore UNPACK_FLIP_Y_WEBGL, which turns the still upside down.
@@ -364,6 +363,7 @@ export class LutRenderer {
       height,
       { ...state, mirror: false, crop: { u0: 0, v0: 0, u1: 1, v1: 1 } },
       this.lut.size,
+      lookIndex(this.lut),
     );
     return canvasToJpeg(this.exporter.canvas, 0.92);
   }
