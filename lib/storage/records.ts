@@ -1,3 +1,6 @@
+import type { PrintCaption } from "@/lib/frames/caption";
+import type { FrameId, FrameOrientation } from "@/lib/frames/film";
+
 export type OriginalSource = "image-capture" | "video-frame" | "none";
 
 export interface CaptureMetadata {
@@ -14,6 +17,9 @@ export interface CaptureMetadata {
   videoFps: number | null;
   audio: string | null;
   webgl: string;
+  frameId?: FrameId;
+  frameOrientation?: FrameOrientation;
+  caption?: PrintCaption | null;
 }
 
 export interface CaptureRecord {
@@ -25,6 +31,8 @@ export interface CaptureRecord {
   intensity: number;
   favorite: boolean;
   graded: Blob;
+  /** Framed still without handwriting, when a print frame was used. */
+  printBase?: Blob | null;
   original: Blob | null;
   thumbnail: Blob;
   originalSource: OriginalSource;

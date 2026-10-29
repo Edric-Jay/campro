@@ -19,10 +19,12 @@ import type { CaptureRecord } from "@/lib/storage/records";
 import { listCaptures, saveCapture } from "@/lib/storage/db";
 import { AspectPreview } from "./frame-overlay";
 import { FramePicker } from "./frame-picker";
+import { FlipIcon, FocusIcon, GalleryIcon, LooksIcon, ProIcon, SettingsIcon, TorchIcon } from "./icons";
 import { LutCarousel } from "./lut-carousel";
 import { OverlayLayer, type FocusMark } from "./overlay";
 import { ProPanel } from "./pro-panel";
 import { SettingsSheet } from "./settings-sheet";
+import { isCaptionFrame } from "@/lib/frames/caption";
 import { useCamera } from "./use-camera";
 import { useSettings } from "./use-settings";
 import { useViewfinder } from "./use-viewfinder";
@@ -233,11 +235,24 @@ export function CameraShell() {
       gradedNote =
         "Graded JPEG from the captured frame. This is not a RAW file. The viewfinder crop is not baked into the file.";
       if (settings.frameId !== "none") {
-        graded = await applyFilmFrame(graded, settings.frameId, settings.frameOrientation);
+        const facing =
+          settings.frameOrientation === "auto"
+            ? window.innerWidth >= window.innerHeight
+              ? "landscape"
+              : "portrait"
+            : settings.frameOrientation;
+        graded = await applyFilmFrame(graded, settings.frameId, facing);
         const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
-        gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${settings.frameOrientation} orientation.`;
+        gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${facing} orientation.`;
       }
     }
+    const framed = settings.frameId !== "none";
+    const printOrientation =
+      settings.frameOrientation === "auto"
+        ? window.innerWidth >= window.innerHeight
+          ? "landscape"
+          : "portrait"
+        : settings.frameOrientation;
     const thumbnail = await downscaleJpeg(graded);
     const record: CaptureRecord = {
       id: crypto.randomUUID(),
@@ -248,6 +263,7 @@ export function CameraShell() {
       intensity: settings.lutIntensity,
       favorite: false,
       graded,
+      printBase: framed ? graded : null,
       original: original.blob,
       thumbnail,
       originalSource: original.source,
@@ -259,12 +275,17 @@ export function CameraShell() {
         stillOptions: original.stillOptions,
         exposureSummary: exposureSummary(settings, camera.probe, camera.confirmed),
         whiteBalanceLabel: wbLabel(settings, camera.probe.controls.whiteBalance.level),
-        gradedNote,
+        gradedNote: isCaptionFrame(settings.frameId)
+          ? `${gradedNote} Open the photo to write on the white border.`
+          : gradedNote,
         timerSeconds: settings.timerSeconds,
         burstIndex: settings.burstCount > 1 ? index + 1 : null,
         videoFps: null,
         audio: null,
         webgl: view.kind,
+        frameId: settings.frameId,
+        frameOrientation: printOrientation,
+        caption: null,
       },
     };
     await saveCapture(record);
@@ -447,7 +468,7 @@ export function CameraShell() {
       className="relative h-dvh overflow-hidden bg-black text-paper"
       style={{
         ["--cam-top" as string]: "calc(4.75rem + env(safe-area-inset-top))",
-        ["--cam-bottom" as string]: "calc(8.25rem + env(safe-area-inset-bottom))",
+        ["--cam-bottom" as string]: "calc(9.25rem + env(safe-area-inset-bottom))",
       }}
     >
       <AspectPreview
@@ -511,19 +532,45 @@ export function CameraShell() {
             </p>
             <p className="font-mono text-[10px] tracking-widest text-paper/70 uppercase">{summary}</p>
           </div>
-          <div className="pointer-events-auto flex items-center gap-2">
-            {battery != null ? <span className="font-mono text-[10px]">{battery}%</span> : null}
-            {quota ? <span className="hidden font-mono text-[10px] text-paper/50 sm:inline">{quota}</span> : null}
-            {camera.probe?.controls.torch.level === "supported" ? (
-              <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => store.update({ flash: settings.flash === "torch" ? "off" : "torch" })}>
-                {settings.flash === "torch" ? "Torch on" : "Torch"}
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            {battery != null ? <span className="mr-1 font-mono text-[10px]">{battery}%</span> : null}
+            {camera.probe?.controls.focus.values?.includes("continuous") ? (
+              <button
+                type="button"
+                aria-label="Autofocus"
+                aria-pressed={settings.focusMode === "continuous"}
+                className={`grid h-10 w-10 place-items-center rounded-full border ${settings.focusMode === "continuous" ? "border-sage bg-sage/20 text-sage" : "border-paper/20 bg-ink/50"}`}
+                onClick={() => store.update({ focusMode: "continuous" })}
+              >
+                <FocusIcon className="h-4 w-4" />
               </button>
             ) : null}
-            <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => store.update({ facingMode: settings.facingMode === "user" ? "environment" : "user" })}>
-              Flip
+            {camera.probe?.controls.torch.level === "supported" ? (
+              <button
+                type="button"
+                aria-label={settings.flash === "torch" ? "Torch on" : "Torch"}
+                aria-pressed={settings.flash === "torch"}
+                className={`grid h-10 w-10 place-items-center rounded-full border ${settings.flash === "torch" ? "border-amber bg-amber/20 text-amber" : "border-paper/20 bg-ink/50"}`}
+                onClick={() => store.update({ flash: settings.flash === "torch" ? "off" : "torch" })}
+              >
+                <TorchIcon className="h-4 w-4" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Flip camera"
+              className="grid h-10 w-10 place-items-center rounded-full border border-paper/20 bg-ink/50"
+              onClick={() => store.update({ facingMode: settings.facingMode === "user" ? "environment" : "user" })}
+            >
+              <FlipIcon className="h-4 w-4" />
             </button>
-            <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => setSettingsOpen(true)}>
-              Set
+            <button
+              type="button"
+              aria-label="Settings"
+              className="grid h-10 w-10 place-items-center rounded-full border border-paper/20 bg-ink/50"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <SettingsIcon className="h-4 w-4" />
             </button>
           </div>
         </header>
@@ -554,12 +601,17 @@ export function CameraShell() {
             </button>
           </div>
           <div className="relative flex h-16 items-center">
-            <Link href="/gallery" data-testid="last-capture" className="absolute left-0 z-10 h-12 w-12 overflow-hidden border border-paper/20 bg-black">
+            <Link
+              href="/gallery"
+              data-testid="last-capture"
+              aria-label="Gallery"
+              className="absolute left-0 z-10 grid h-12 w-12 place-items-center overflow-hidden border border-paper/20 bg-black text-paper/70"
+            >
               {thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={thumb.url} alt="Latest capture" className="h-full w-full object-cover" />
               ) : (
-                <span className="block h-full w-full" />
+                <GalleryIcon className="h-5 w-5" />
               )}
             </Link>
             <button
@@ -576,26 +628,29 @@ export function CameraShell() {
             >
               <span className={`block h-12 w-12 rounded-full ${recording ? "h-5 w-5 bg-danger" : settings.captureMode === "video" ? "bg-danger" : "bg-paper"}`} />
             </button>
-            <div className="absolute right-0 z-10 flex max-w-[38%] flex-col items-end gap-1">
+            <div className="absolute right-0 z-10 flex items-center gap-1">
               <button
                 type="button"
+                aria-label={`Looks, ${lut?.name ?? "Natural"}`}
                 aria-pressed={drawer === "looks"}
-                className="max-w-full truncate font-mono text-[11px] leading-tight uppercase"
+                className={`grid h-11 w-11 place-items-center rounded-full border ${drawer === "looks" ? "border-sage bg-sage/15 text-sage" : "border-paper/20"}`}
                 onClick={() => setDrawer((current) => (current === "looks" ? null : "looks"))}
               >
-                {lut?.name ?? "Looks"}
+                <LooksIcon className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 data-testid="pro-toggle"
+                aria-label="Pro controls"
                 aria-pressed={drawer === "pro"}
-                className="font-mono text-[10px] tracking-widest uppercase"
+                className={`grid h-11 w-11 place-items-center rounded-full border ${drawer === "pro" ? "border-sage bg-sage/15 text-sage" : "border-paper/20"}`}
                 onClick={() => setDrawer((current) => (current === "pro" ? null : "pro"))}
               >
-                Pro
+                <ProIcon className="h-4 w-4" />
               </button>
             </div>
           </div>
+          <p className="mt-1 text-center font-mono text-[10px] tracking-widest text-paper/45 uppercase">{lut?.name ?? "Looks"}</p>
         </nav>
       ) : null}
 

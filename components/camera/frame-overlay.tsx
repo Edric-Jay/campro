@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { imageWindowAspect, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 
+function readBox(node: HTMLElement) {
+  const rect = node.getBoundingClientRect();
+  return { width: rect.width, height: rect.height };
+}
+
 export function AspectPreview({
   frameId,
   orientation,
@@ -20,17 +25,44 @@ export function AspectPreview({
   useEffect(() => {
     const node = rootRef.current;
     if (!node) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setBox({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [frameId, orientation]);
 
-  const aspect =
-    frameId === "none"
-      ? null
-      : imageWindowAspect(frameId, resolveOrientation(orientation, box.width || 3, box.height || 4));
+    const measure = () => setBox(readBox(node));
+    measure();
+
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(node);
+
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    const visual = window.visualViewport;
+    visual?.addEventListener("resize", measure);
+    const screenOrientation = window.screen?.orientation;
+    screenOrientation?.addEventListener("change", measure);
+
+    // Some mobile browsers fire orientationchange before layout settles.
+    const afterRotate = () => {
+      measure();
+      window.setTimeout(measure, 50);
+      window.setTimeout(measure, 250);
+    };
+    window.addEventListener("orientationchange", afterRotate);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      window.removeEventListener("orientationchange", afterRotate);
+      visual?.removeEventListener("resize", measure);
+      screenOrientation?.removeEventListener("change", measure);
+    };
+  }, [frameId, clearChrome]);
+
+  // Preview always follows the live screen shape so rotating the phone updates the crop.
+  // Portrait / Landscape in settings only locks the print when capturing.
+  const fallbackW = typeof window !== "undefined" ? window.innerWidth : 3;
+  const fallbackH = typeof window !== "undefined" ? window.innerHeight : 4;
+  const screenOrientation = resolveOrientation("auto", box.width || fallbackW, box.height || fallbackH);
+  const aspect = frameId === "none" ? null : imageWindowAspect(frameId, screenOrientation);
 
   return (
     <div
@@ -41,6 +73,7 @@ export function AspectPreview({
     >
       {aspect ? (
         <div
+          key={`${screenOrientation}-${aspect.toFixed(3)}`}
           className="relative overflow-hidden"
           style={{
             width: `min(100cqw, calc(100cqh * ${aspect}))`,
@@ -52,6 +85,11 @@ export function AspectPreview({
       ) : (
         <div className="relative h-full w-full overflow-hidden">{children}</div>
       )}
+      {orientation !== "auto" && frameId !== "none" ? (
+        <p className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-ink/70 px-2 py-1 font-mono text-[9px] tracking-widest text-paper/70 uppercase">
+          Preview follows phone · print locked {orientation}
+        </p>
+      ) : null}
     </div>
   );
 }

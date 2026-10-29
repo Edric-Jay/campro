@@ -20,7 +20,7 @@ export function FramePicker({
   onOrientation: (orientation: FrameOrientation) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 px-3">
+    <div className="flex flex-col gap-2.5 px-3">
       <div className="flex items-center justify-between gap-2">
         <p className="font-mono text-[10px] tracking-[0.16em] text-paper/55 uppercase">Frame</p>
         <div className="flex gap-1">
@@ -39,8 +39,8 @@ export function FramePicker({
           ))}
         </div>
       </div>
-      <p className="font-mono text-[10px] leading-snug text-paper/45">
-        Preview shows the print window only. The paper border is added after capture. Landscape assumes you rotate the phone.
+      <p className="text-[11px] leading-snug text-paper/45">
+        Preview follows the phone as you rotate. Auto matches that on capture. Portrait or Landscape locks only the saved print shape.
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FRAMES.map((frame) => (

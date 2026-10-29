@@ -59,7 +59,7 @@ export function GalleryView() {
 
   return (
     <main className="min-h-dvh bg-ink px-4 py-4 text-paper">
-      <header className="mb-4 flex items-baseline justify-between">
+      <header className="mb-5 flex items-baseline justify-between border-b border-paper/10 pb-3">
         <h1 className="font-mono text-xs tracking-[0.18em] uppercase">Gallery</h1>
         <Link href="/" className="text-sm text-sage">
           Camera
@@ -69,7 +69,7 @@ export function GalleryView() {
       {captures.length === 0 ? <p className="text-sm text-paper/60">No captures yet. Photos stay on this device.</p> : null}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {captures.map((record) => (
-          <article key={record.id} data-testid="capture-card" className="border border-paper/10">
+          <article key={record.id} data-testid="capture-card" className="overflow-hidden rounded-lg border border-paper/10 bg-panel">
             <Link href={`/gallery/${record.id}`}>
               {urls[record.id] ? (
                 // eslint-disable-next-line @next/next/no-img-element
