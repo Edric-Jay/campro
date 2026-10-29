@@ -63,6 +63,13 @@ describe("grade intensity", () => {
     expect(graded[2]).toBeGreaterThan(graded[0]);
   });
 
+  it("blows highlights and warms a 2000s digicam grade", () => {
+    const mid = gradeBuiltinColor([0.45, 0.45, 0.45], 24);
+    const bright = gradeBuiltinColor([0.9, 0.9, 0.9], 24);
+    expect(mid[0]).toBeGreaterThan(mid[2]);
+    expect(bright[0]).toBeGreaterThan(0.9);
+  });
+
   it("renders Mono and Noir as gray", () => {
     for (const look of [14, 20]) {
       const graded = gradeBuiltinColor([0.2, 0.7, 0.4], look);

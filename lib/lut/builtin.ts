@@ -174,6 +174,7 @@ export const LOOKS: LookDefinition[] = [
   { id: "arctic", name: "Arctic", note: "Blue / Cool", params: neutral },
   { id: "vintage", name: "Vintage", note: "Sepia / Soft", params: neutral },
   { id: "pastel", name: "Pastel", note: "Airy / Soft", params: neutral },
+  { id: "digicam", name: "2000s", note: "Soft / Flash / CCD", params: neutral },
 ];
 
 export const BUILTIN_LOOK_INDEX: Record<string, number> = Object.fromEntries(

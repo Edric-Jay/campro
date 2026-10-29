@@ -198,9 +198,20 @@ export function gradeBuiltinColor(rgb: Rgb, look: number): Rgb {
     result = scale3(rgb, [0.88, 1.04, 1.15]);
     result = [result[0] - 0.015, result[1] + 0.015, result[2] + 0.035];
   } else if (look < 22.5) result = contrast(scale3(rgb, [1.1, 1.02, 0.88]), 0.85, 0.55);
-  else {
+  else if (look < 23.5) {
     result = mix3(rgb, luma, 0.18);
     result = [result[0] * 0.88 + 0.08 + 0.045, result[1] * 0.88 + 0.08 + 0.015, result[2] * 0.88 + 0.08 + 0.035];
+  } else {
+    result = contrast(rgb, 1.16, 0.46);
+    result = [
+      result[0] - 0.03 * (1 - l) + 0.06 * l,
+      result[1] + 0.02 * (1 - l) + 0.025 * l,
+      result[2] + 0.04 * (1 - l) - 0.03 * l,
+    ];
+    result = [result[0] * 1.08, result[1] + 0.015, result[2]];
+    const edge = Math.min(1, Math.max(0, (l - 0.72) / 0.26));
+    const blow = edge * edge * (3 - 2 * edge) * 0.35;
+    result = [result[0] + (1 - result[0]) * blow, result[1] + (1 - result[1]) * blow, result[2] + (1 - result[2]) * blow];
   }
   return [clamp01(result[0]), clamp01(result[1]), clamp01(result[2])];
 }

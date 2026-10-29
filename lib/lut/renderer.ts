@@ -112,16 +112,33 @@ vec3 grade(vec3 c, float look) {
   } else if (look < 22.5) {
     result = c * vec3(1.10, 1.02, 0.88);
     result = (result - 0.5) * 0.85 + 0.55;
-  } else {
+  } else if (look < 23.5) {
     result = mix(c, vec3(l), 0.18);
     result = result * 0.88 + 0.08;
     result += vec3(0.045, 0.015, 0.035);
+  } else {
+    result = (c - 0.5) * 1.16 + 0.46;
+    result += vec3(-0.03, 0.02, 0.04) * (1.0 - l);
+    result += vec3(0.06, 0.025, -0.03) * l;
+    result.r *= 1.08;
+    result.g += 0.015;
+    result = mix(result, vec3(1.0), smoothstep(0.72, 0.98, l) * 0.35);
   }
   return clamp(result, 0.0, 1.0);
 }
 void main() {
   vec2 uv = mix(uCrop.xy, uCrop.zw, vUv);
   vec3 color = texture2D(uVideo, uv).rgb;
+  if (uLook > 23.5 && uLook < 24.5) {
+    vec2 o = vec2(0.0022, 0.0030);
+    color = color * 0.36
+      + texture2D(uVideo, uv + vec2(o.x, 0.0)).rgb * 0.16
+      + texture2D(uVideo, uv - vec2(o.x, 0.0)).rgb * 0.16
+      + texture2D(uVideo, uv + vec2(0.0, o.y)).rgb * 0.16
+      + texture2D(uVideo, uv - vec2(0.0, o.y)).rgb * 0.16;
+    float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    color += (n - 0.5) * 0.04;
+  }
   color = clamp(color * uWbGains, 0.0, 1.0);
   vec3 graded = uLook < 0.0 ? lookup(color, max(uLutSize, 2.0)) : grade(color, uLook);
   color = mix(color, graded, clamp(uIntensity, 0.0, 1.0));

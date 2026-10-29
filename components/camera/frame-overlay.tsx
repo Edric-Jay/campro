@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { frameLayout, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 
-export function FrameOverlay({ frameId, orientation }: { frameId: FrameId; orientation: FrameOrientation }) {
+export function FrameOverlay({
+  frameId,
+  orientation,
+  clearChrome = false,
+}: {
+  frameId: FrameId;
+  orientation: FrameOrientation;
+  clearChrome?: boolean;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
 
@@ -21,7 +29,12 @@ export function FrameOverlay({ frameId, orientation }: { frameId: FrameId; orien
   const layout = frameLayout(frameId, resolveOrientation(orientation, box.width || 3, box.height || 4));
 
   return (
-    <div ref={rootRef} className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center [container-type:size]">
+    <div
+      ref={rootRef}
+      className={`pointer-events-none absolute z-0 flex items-center justify-center [container-type:size] ${
+        clearChrome ? "inset-x-0 top-[var(--cam-top)] bottom-[var(--cam-bottom)]" : "inset-0"
+      }`}
+    >
       {layout ? <div
         className="relative"
         style={{

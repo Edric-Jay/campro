@@ -440,215 +440,203 @@ export function CameraShell() {
     shutterById(settings.shutterId).seconds !== "auto" &&
     (shutterById(settings.shutterId).seconds as number) >= 1;
 
-  const dock = (labelled: boolean) => (
-    <div className="flex items-end justify-between gap-3 px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <Link href="/gallery" data-testid={labelled ? "last-capture" : undefined} className="pointer-events-auto h-12 w-12 overflow-hidden border border-paper/20 bg-ink">
-        {thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb.url} alt="Latest capture" className="h-full w-full object-cover" />
-        ) : (
-          <span className="block h-full w-full" />
-        )}
-      </Link>
-      <button
-        type="button"
-        data-testid={labelled ? "shutter" : undefined}
-        aria-label={settings.captureMode === "video" ? "Record" : "Shutter"}
-        disabled={camera.phase !== "live" || (busy && !recording)}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.preventDefault();
-          void shutter();
-        }}
-        className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full border-2 border-paper/80 disabled:opacity-40"
-      >
-        <span className={`block h-12 w-12 rounded-full ${recording ? "h-5 w-5 bg-danger" : settings.captureMode === "video" ? "bg-danger" : "bg-paper"}`} />
-      </button>
-      <div className="pointer-events-auto flex w-24 flex-col items-end gap-1">
-        <button
-          type="button"
-          className="font-mono text-[10px] tracking-widest uppercase"
-          onClick={() => store.update({ captureMode: settings.captureMode === "photo" ? "video" : "photo" })}
-        >
-          {settings.captureMode}
-        </button>
-        <button type="button" className="font-mono text-[10px] tracking-widest uppercase lg:hidden" onClick={() => setDrawer((current) => (current === "looks" ? null : "looks"))}>
-          {lut?.name ?? "Looks"}
-        </button>
-        <button type="button" data-testid="pro-toggle" className="font-mono text-[10px] tracking-widest uppercase lg:hidden" onClick={() => setDrawer((current) => (current === "pro" ? null : "pro"))}>
-          Pro
-        </button>
-      </div>
-    </div>
-  );
+  const chrome = !settings.cleanViewfinder;
 
   return (
-    <div className="h-dvh overflow-hidden bg-ink text-paper">
-      <div className="grid h-full lg:grid-cols-[200px_minmax(0,1fr)_320px]">
-        <aside className="hidden flex-col gap-3 border-r border-paper/15 p-4 lg:flex">
-          <p className="font-mono text-[10px] tracking-[0.2em] uppercase">camLUT Pro</p>
-          <button type="button" className="min-h-9 rounded-full border border-paper/15" onClick={() => store.update({ facingMode: settings.facingMode === "user" ? "environment" : "user" })}>
-            {settings.facingMode === "user" ? "Front" : "Rear"}
-          </button>
-          <button type="button" className="min-h-9 rounded-full border border-paper/15" onClick={() => setSettingsOpen(true)}>
-            Settings
-          </button>
-          <p className="text-xs leading-relaxed text-paper/45">Space shutter. G grid. H clean. F flip. Arrows change the look.</p>
-        </aside>
+    <div
+      className="relative h-dvh overflow-hidden bg-black text-paper"
+      style={{
+        ["--cam-top" as string]: "calc(4.75rem + env(safe-area-inset-top))",
+        ["--cam-bottom" as string]: "calc(8.25rem + env(safe-area-inset-bottom))",
+      }}
+    >
+      <div className="absolute inset-0" onPointerDown={onViewTap}>
+        <video
+          ref={camera.videoRef}
+          playsInline
+          muted
+          autoPlay
+          data-testid="camera-video"
+          className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full object-cover opacity-0"}
+        />
+        <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
+        {settings.captureMode === "photo" ? (
+          <FrameOverlay frameId={settings.frameId} orientation={settings.frameOrientation} clearChrome={chrome} />
+        ) : null}
+        <OverlayLayer
+          settings={settings}
+          analysis={view.analysis}
+          focus={focus}
+          tilt={tilt}
+          levelPermission={levelPermission}
+          onAskLevel={() => void askLevel()}
+        />
+        {camera.phase !== "live" && camera.phase !== "idle" && camera.phase !== "requesting" ? (
+          <div className="absolute inset-0 z-20 grid content-center justify-items-center gap-3 bg-ink/80 px-6 text-center">
+            <p className="max-w-xs text-sm">{camera.message}</p>
+            <button type="button" className="min-h-10 rounded-full border border-paper/30 px-4" onClick={() => void camera.retry()}>
+              Try again
+            </button>
+          </div>
+        ) : null}
+        {countdown !== null ? <p className="pointer-events-none absolute inset-0 z-20 grid place-items-center font-mono text-6xl">{countdown}</p> : null}
+        {longExposure ? (
+          <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-1/2 z-20 -translate-x-1/2 font-mono text-xs tracking-widest uppercase">
+            Exposing {shutterById(settings.shutterId).label}
+          </p>
+        ) : null}
+        {recording ? <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 font-mono text-xs text-danger">Rec {Math.floor(elapsed / 1000).toString().padStart(2, "0")}s</p> : null}
+        {view.slow && !drawer ? (
+          <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 text-[10px] tracking-widest text-amber uppercase">Preview running slow</p>
+        ) : null}
+        {(notice || store.notice) && chrome ? (
+          <p className="pointer-events-none absolute top-[var(--cam-top)] right-3 left-3 z-20 text-xs text-paper/80">{notice || store.notice}</p>
+        ) : null}
+        {settings.facingMode === "user" && chrome ? (
+          <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-3 z-20 pb-1 font-mono text-[9px] tracking-widest text-paper/50 uppercase">
+            Front preview is a mirror. Saved photos are not.
+          </p>
+        ) : null}
+      </div>
 
-        <section className="relative flex min-h-0 min-w-0 flex-col">
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-black" onPointerDown={onViewTap}>
-            <video
-              ref={camera.videoRef}
-              playsInline
-              muted
-              autoPlay
-              data-testid="camera-video"
-              className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full opacity-0"}
-            />
-            <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
-            {settings.captureMode === "photo" ? (
-              <FrameOverlay frameId={settings.frameId} orientation={settings.frameOrientation} />
-            ) : null}
-            <OverlayLayer
-              settings={settings}
-              analysis={view.analysis}
-              focus={focus}
-              tilt={tilt}
-              levelPermission={levelPermission}
-              onAskLevel={() => void askLevel()}
-            />
-            <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-3 pt-[max(12px,env(safe-area-inset-top))]">
-              <div>
-                <p className="font-mono text-[11px] tracking-[0.22em] uppercase">camLUT Pro</p>
-                <p data-testid="status" className="font-mono text-[10px] tracking-widest text-sage uppercase">
-                  {camera.phase === "live" ? "Live" : camera.message}
-                </p>
-              </div>
-              <div className="pointer-events-auto flex items-center gap-2">
-                {battery != null ? <span className="font-mono text-[10px]">{battery}%</span> : null}
-                {quota ? <span className="hidden font-mono text-[10px] text-paper/50 sm:inline">{quota}</span> : null}
-                {camera.probe?.controls.torch.level === "supported" ? (
-                  <button type="button" className="min-h-8 rounded-full border border-paper/20 px-2 text-[10px] tracking-widest uppercase" onClick={() => store.update({ flash: settings.flash === "torch" ? "off" : "torch" })}>
-                    {settings.flash === "torch" ? "Torch on" : "Torch"}
-                  </button>
-                ) : null}
-                <button type="button" className="min-h-8 rounded-full border border-paper/20 px-2 text-[10px] tracking-widest uppercase lg:hidden" onClick={() => store.update({ facingMode: settings.facingMode === "user" ? "environment" : "user" })}>
-                  Flip
-                </button>
-                <button type="button" className="min-h-8 rounded-full border border-paper/20 px-2 text-[10px] tracking-widest uppercase lg:hidden" onClick={() => setSettingsOpen(true)}>
-                  Set
-                </button>
-              </div>
-            </header>
-            {camera.phase !== "live" && camera.phase !== "idle" && camera.phase !== "requesting" ? (
-              <div className="absolute inset-0 z-20 grid content-center justify-items-center gap-3 bg-ink/80 px-6 text-center">
-                <p className="max-w-xs text-sm">{camera.message}</p>
-                <button type="button" className="min-h-10 rounded-full border border-paper/30 px-4" onClick={() => void camera.retry()}>
-                  Try again
-                </button>
-              </div>
-            ) : null}
-            {countdown !== null ? <p className="absolute inset-0 grid place-items-center font-mono text-6xl">{countdown}</p> : null}
-            {longExposure ? <p className="absolute bottom-28 left-1/2 -translate-x-1/2 font-mono text-xs tracking-widest uppercase">Exposing {shutterById(settings.shutterId).label}</p> : null}
-            {recording ? <p className="absolute top-16 left-3 font-mono text-xs text-danger">Rec {Math.floor(elapsed / 1000).toString().padStart(2, "0")}s</p> : null}
-            {view.slow && !drawer ? (
-              <p className="pointer-events-none absolute top-14 left-3 z-10 text-[10px] tracking-widest text-amber uppercase">Preview running slow</p>
-            ) : null}
-            {(notice || store.notice) && !settings.cleanViewfinder ? (
-              <p className="absolute top-16 left-3 right-16 text-xs text-paper/80">{notice || store.notice}</p>
-            ) : null}
-            {!settings.cleanViewfinder ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 to-transparent pt-8 lg:hidden">
-                <p className="pointer-events-none px-3 pb-1 font-mono text-[10px] tracking-widest text-paper/70 uppercase">{summary}</p>
-                {dock(false)}
-              </div>
-            ) : (
-              <div className="absolute inset-x-0 bottom-0 lg:hidden">{dock(false)}</div>
-            )}
-            {settings.cleanViewfinder ? (
-              <button type="button" className="absolute right-3 bottom-24 min-h-8 rounded-full border border-paper/20 px-3 text-[10px] tracking-widest uppercase" onClick={() => store.update({ cleanViewfinder: false })}>
-                Show controls
+      {chrome ? (
+        <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-ink/80 to-transparent px-3 pt-[max(12px,env(safe-area-inset-top))] pb-6">
+          <div>
+            <p className="font-mono text-[11px] tracking-[0.22em] uppercase">camLUT Pro</p>
+            <p data-testid="status" className="font-mono text-[10px] tracking-widest text-sage uppercase">
+              {camera.phase === "live" ? "Live" : camera.message}
+            </p>
+            <p className="font-mono text-[10px] tracking-widest text-paper/70 uppercase">{summary}</p>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-2">
+            {battery != null ? <span className="font-mono text-[10px]">{battery}%</span> : null}
+            {quota ? <span className="hidden font-mono text-[10px] text-paper/50 sm:inline">{quota}</span> : null}
+            {camera.probe?.controls.torch.level === "supported" ? (
+              <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => store.update({ flash: settings.flash === "torch" ? "off" : "torch" })}>
+                {settings.flash === "torch" ? "Torch on" : "Torch"}
               </button>
             ) : null}
-            {settings.facingMode === "user" ? (
-              <p className="pointer-events-none absolute bottom-2 left-3 font-mono text-[9px] tracking-widest text-paper/40 uppercase">Front preview is a mirror. Saved photos are not.</p>
-            ) : null}
+            <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => store.update({ facingMode: settings.facingMode === "user" ? "environment" : "user" })}>
+              Flip
+            </button>
+            <button type="button" className="min-h-8 rounded-full border border-paper/20 bg-ink/50 px-2 text-[10px] tracking-widest uppercase" onClick={() => setSettingsOpen(true)}>
+              Set
+            </button>
           </div>
-          <div className={`relative z-20 hidden shrink-0 border-t border-paper/15 bg-ink lg:block ${settings.cleanViewfinder ? "lg:hidden" : ""}`}>
-            <div className="py-2">
-              <LutCarousel
-                luts={luts}
-                settings={settings}
-                disabled={view.kind === "none"}
-                onSelect={store.selectLut}
-                onIntensity={(lutIntensity) => store.update({ lutIntensity })}
-                onFavorite={store.toggleFavorite}
-                onImport={(file) => void store.importCube(file)}
-                onDelete={(id) => void store.deleteCustomLut(id)}
-              />
-            </div>
+        </header>
+      ) : (
+        <button type="button" className="absolute top-[max(12px,env(safe-area-inset-top))] right-3 z-30 min-h-8 rounded-full border border-paper/20 bg-ink/70 px-3 text-[10px] tracking-widest uppercase" onClick={() => store.update({ cleanViewfinder: false })}>
+          Show controls
+        </button>
+      )}
+
+      {chrome ? (
+        <nav aria-label="Camera controls" className="absolute inset-x-0 bottom-0 z-30 border-t border-paper/15 bg-ink px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="mb-2 flex justify-center gap-1">
+            <button
+              type="button"
+              aria-pressed={settings.captureMode === "photo"}
+              className={`min-h-8 rounded-full px-3 font-mono text-[10px] tracking-widest uppercase ${settings.captureMode === "photo" ? "bg-paper text-ink" : "text-paper/70"}`}
+              onClick={() => store.update({ captureMode: "photo" })}
+            >
+              Photo
+            </button>
+            <button
+              type="button"
+              aria-pressed={settings.captureMode === "video"}
+              className={`min-h-8 rounded-full px-3 font-mono text-[10px] tracking-widest uppercase ${settings.captureMode === "video" ? "bg-danger text-paper" : "text-paper/70"}`}
+              onClick={() => store.update({ captureMode: "video" })}
+            >
+              Video
+            </button>
+          </div>
+          <div className="grid grid-cols-[3rem_minmax(0,1fr)_5.75rem_2.75rem] items-center gap-1">
+            <Link href="/gallery" data-testid="last-capture" className="h-12 w-12 overflow-hidden border border-paper/20 bg-black">
+              {thumb ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={thumb.url} alt="Latest capture" className="h-full w-full object-cover" />
+              ) : (
+                <span className="block h-full w-full" />
+              )}
+            </Link>
+            <button
+              type="button"
+              data-testid="shutter"
+              aria-label={settings.captureMode === "video" ? "Record" : "Shutter"}
+              disabled={camera.phase !== "live" || (busy && !recording)}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                void shutter();
+              }}
+              className="mx-auto grid h-16 w-16 place-items-center rounded-full border-2 border-paper/80 disabled:opacity-40"
+            >
+              <span className={`block h-12 w-12 rounded-full ${recording ? "h-5 w-5 bg-danger" : settings.captureMode === "video" ? "bg-danger" : "bg-paper"}`} />
+            </button>
+            <button
+              type="button"
+              aria-pressed={drawer === "looks"}
+              className="line-clamp-2 text-right font-mono text-[11px] leading-tight uppercase"
+              onClick={() => setDrawer((current) => (current === "looks" ? null : "looks"))}
+            >
+              {lut?.name ?? "Looks"}
+            </button>
+            <button
+              type="button"
+              data-testid="pro-toggle"
+              aria-pressed={drawer === "pro"}
+              className="text-right font-mono text-[10px] tracking-widest uppercase"
+              onClick={() => setDrawer((current) => (current === "pro" ? null : "pro"))}
+            >
+              Pro
+            </button>
+          </div>
+        </nav>
+      ) : null}
+
+      {drawer === "looks" ? (
+        <div className="absolute inset-x-0 bottom-[var(--cam-bottom)] z-40 max-h-[min(58dvh,calc(100dvh-var(--cam-top)-var(--cam-bottom)))] overflow-y-auto rounded-t-2xl border-t border-paper/15 bg-panel shadow-[0_-12px_40px_rgba(0,0,0,0.45)]">
+          <div className="flex justify-center pt-2">
+            <span className="h-1 w-10 rounded-full bg-paper/30" />
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2">
+            <p className="font-mono text-[10px] tracking-widest uppercase">Looks</p>
+            <button type="button" className="ml-auto min-h-9 px-3 font-mono text-[10px] tracking-widest uppercase" onClick={() => setDrawer(null)}>
+              Close
+            </button>
+          </div>
+          <div className="pb-3">
             <FramePicker
               frameId={settings.frameId}
               orientation={settings.frameOrientation}
               onFrame={(frameId) => store.update({ frameId })}
               onOrientation={(frameOrientation) => store.update({ frameOrientation })}
             />
-            <p className="px-3 pb-1 font-mono text-[10px] tracking-widest text-paper/60 uppercase">{summary}</p>
-            {dock(true)}
-          </div>
-        </section>
-
-        <div className={`${drawer ? "fixed inset-x-0 bottom-0 z-30 max-h-[72dvh] overflow-y-auto rounded-t-2xl border-t border-paper/15 bg-panel shadow-[0_-12px_40px_rgba(0,0,0,0.45)]" : "max-lg:hidden"} lg:static lg:z-auto lg:block lg:max-h-none lg:min-h-0 lg:min-w-0 lg:overflow-y-auto lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none`}>
-          <div className="lg:hidden">
-            <div className="flex justify-center pt-2">
-              <span className="h-1 w-10 rounded-full bg-paper/30" />
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2">
-              <button type="button" aria-pressed={drawer === "looks"} className="min-h-9 rounded-full border border-paper/15 px-3 font-mono text-[10px] tracking-widest uppercase" onClick={() => setDrawer("looks")}>
-                Looks
-              </button>
-              <button type="button" aria-pressed={drawer === "pro"} className="min-h-9 rounded-full border border-paper/15 px-3 font-mono text-[10px] tracking-widest uppercase" onClick={() => setDrawer("pro")}>
-                Pro
-              </button>
-              <button type="button" className="ml-auto min-h-9 px-3 font-mono text-[10px] tracking-widest uppercase" onClick={() => setDrawer(null)}>
-                Close
-              </button>
-            </div>
-            {drawer === "looks" ? (
-              <div className="pb-3">
-                <FramePicker
-                  frameId={settings.frameId}
-                  orientation={settings.frameOrientation}
-                  onFrame={(frameId) => store.update({ frameId })}
-                  onOrientation={(frameOrientation) => store.update({ frameOrientation })}
-                />
-                <LutCarousel
-                  luts={luts}
-                  settings={settings}
-                  disabled={view.kind === "none"}
-                  layout="grid"
-                  onSelect={store.selectLut}
-                  onIntensity={(lutIntensity) => store.update({ lutIntensity })}
-                  onFavorite={store.toggleFavorite}
-                  onImport={(file) => void store.importCube(file)}
-                  onDelete={(id) => void store.deleteCustomLut(id)}
-                />
-              </div>
-            ) : null}
-          </div>
-          <div className={drawer === "looks" ? "max-lg:hidden" : ""}>
-            <ProPanel
+            <LutCarousel
+              luts={luts}
               settings={settings}
-              probe={camera.probe}
-              errors={camera.errors}
-              update={store.update}
-              audio={audio}
-              confirmedFps={confirmedFps}
-              onClose={() => setDrawer(null)}
+              disabled={view.kind === "none"}
+              layout="grid"
+              onSelect={store.selectLut}
+              onIntensity={(lutIntensity) => store.update({ lutIntensity })}
+              onFavorite={store.toggleFavorite}
+              onImport={(file) => void store.importCube(file)}
+              onDelete={(id) => void store.deleteCustomLut(id)}
             />
           </div>
         </div>
+      ) : null}
+
+      <div className={drawer === "pro" ? "absolute inset-x-0 bottom-[var(--cam-bottom)] z-40 max-h-[min(62dvh,calc(100dvh-var(--cam-top)-var(--cam-bottom)))] overflow-y-auto rounded-t-2xl border-t border-paper/15 bg-panel shadow-[0_-12px_40px_rgba(0,0,0,0.45)]" : "hidden"}>
+        <ProPanel
+          settings={settings}
+          probe={camera.probe}
+          errors={camera.errors}
+          update={store.update}
+          audio={audio}
+          confirmedFps={confirmedFps}
+          onClose={() => setDrawer(null)}
+        />
       </div>
       <SettingsSheet
         open={settingsOpen}

@@ -79,7 +79,7 @@ export function ProPanel({
 }) {
   if (!probe) {
     return (
-      <aside className="hidden overflow-y-auto border-paper/15 bg-panel p-4 lg:block lg:border-l" data-testid="pro-panel">
+      <aside className="bg-panel p-4" data-testid="pro-panel">
         <TechLabel>Pro</TechLabel>
         <p className="mt-3 text-sm text-paper/60">Controls appear after the camera reports its capabilities.</p>
       </aside>
@@ -94,14 +94,14 @@ export function ProPanel({
 
   return (
     <aside
-      className="flex max-h-[78dvh] flex-col gap-5 overflow-y-auto border-paper/15 bg-panel p-4 lg:max-h-none lg:border-l"
+      className="flex flex-col gap-5 bg-panel p-4"
       data-testid="pro-panel"
     >
       <div className="flex items-baseline justify-between">
         <TechLabel>Pro</TechLabel>
         <div className="flex items-center gap-3">
           {onClose ? (
-            <button type="button" className="font-mono text-[10px] tracking-[0.14em] uppercase lg:hidden" onClick={onClose}>
+            <button type="button" className="font-mono text-[10px] tracking-[0.14em] uppercase" onClick={onClose}>
               Close
             </button>
           ) : null}

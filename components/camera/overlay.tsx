@@ -107,7 +107,7 @@ export function OverlayLayer({
       {!clean && settings.crosshair ? <div className="crosshair absolute inset-0" /> : null}
       {!clean && settings.safeFrame ? <div className="absolute inset-[8%] border border-paper/35" /> : null}
       {!clean && settings.level ? (
-        <div className="absolute top-16 left-1/2 flex -translate-x-1/2 flex-col items-center gap-1">
+        <div className="absolute top-[var(--cam-top)] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1">
           {levelPermission === "needed" ? (
             <button type="button" className="pointer-events-auto min-h-8 rounded-full border border-paper/20 px-3 text-[10px] tracking-widest uppercase" onClick={onAskLevel}>
               Allow level
@@ -133,7 +133,7 @@ export function OverlayLayer({
         </div>
       ) : null}
       {!clean && analysis ? (
-        <div className="absolute top-16 right-3 w-28">
+        <div className="absolute top-[var(--cam-top)] right-3 w-28">
           <p className="font-mono text-[10px] tracking-[0.14em] text-paper/70 uppercase">Preview meter</p>
           <div className="mt-1 h-1 bg-paper/20">
             <div
