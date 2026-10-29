@@ -1,5 +1,17 @@
 import type { FrameOrientation, ResolvedOrientation } from "@/lib/frames/film";
 
+export type LandscapeSide = "primary" | "secondary";
+
+export interface DeviceRotation {
+  facing: ResolvedOrientation;
+  angle: number;
+  /** Which landscape direction when facing is landscape. */
+  landscapeSide: LandscapeSide;
+  /** True when the phone is upside-down in portrait. */
+  portraitInverted: boolean;
+  type: string;
+}
+
 /** Prefer the live viewfinder box — it already tracks phone rotation for the preview. */
 export function viewfinderOrientation(canvas: { clientWidth: number; clientHeight: number } | null | undefined): ResolvedOrientation | null {
   if (!canvas || canvas.clientWidth < 2 || canvas.clientHeight < 2) return null;
@@ -8,20 +20,7 @@ export function viewfinderOrientation(canvas: { clientWidth: number; clientHeigh
 
 /** Phone / viewport orientation used when the viewfinder size is unavailable. */
 export function currentViewOrientation(): ResolvedOrientation {
-  if (typeof window === "undefined") return "portrait";
-  if (window.matchMedia("(orientation: landscape)").matches) return "landscape";
-  if (window.matchMedia("(orientation: portrait)").matches) return "portrait";
-  const type = window.screen?.orientation?.type;
-  if (typeof type === "string") {
-    if (type.startsWith("landscape")) return "landscape";
-    if (type.startsWith("portrait")) return "portrait";
-  }
-  const legacy = (window as Window & { orientation?: number }).orientation;
-  if (legacy === 90 || legacy === -90 || legacy === 270) return "landscape";
-  if (legacy === 0 || legacy === 180) return "portrait";
-  const width = window.visualViewport?.width ?? window.innerWidth;
-  const height = window.visualViewport?.height ?? window.innerHeight;
-  return width >= height ? "landscape" : "portrait";
+  return readDeviceRotation().facing;
 }
 
 export function resolveCaptureOrientation(
@@ -33,38 +32,94 @@ export function resolveCaptureOrientation(
 }
 
 export function screenOrientationAngle(): number {
-  if (typeof window === "undefined") return 0;
-  const angle = window.screen?.orientation?.angle;
-  if (typeof angle === "number" && Number.isFinite(angle)) return ((angle % 360) + 360) % 360;
-  const legacy = (window as Window & { orientation?: number }).orientation;
-  if (typeof legacy === "number" && Number.isFinite(legacy)) return ((legacy % 360) + 360) % 360;
-  return currentViewOrientation() === "landscape" ? 90 : 0;
+  return readDeviceRotation().angle;
 }
 
 /**
- * Quarter-turns clockwise so a still's pixel aspect matches the target print orientation.
- * ImageCapture / video frames often keep sensor orientation while the UI has rotated.
+ * Read the OS orientation. Landscape left vs right is `landscape-secondary` vs
+ * `landscape-primary` (or angle 270 vs 90) — both are landscape, but the still
+ * needs a 180° difference between them.
+ */
+export function readDeviceRotation(): DeviceRotation {
+  if (typeof window === "undefined") {
+    return { facing: "portrait", angle: 0, landscapeSide: "primary", portraitInverted: false, type: "" };
+  }
+
+  const type = window.screen?.orientation?.type ?? "";
+  let angle = 0;
+  const reported = window.screen?.orientation?.angle;
+  if (typeof reported === "number" && Number.isFinite(reported)) {
+    angle = ((reported % 360) + 360) % 360;
+  } else {
+    const legacy = (window as Window & { orientation?: number }).orientation;
+    if (typeof legacy === "number" && Number.isFinite(legacy)) {
+      angle = ((legacy % 360) + 360) % 360;
+    }
+  }
+
+  let facing: ResolvedOrientation = "portrait";
+  let landscapeSide: LandscapeSide = "primary";
+  let portraitInverted = false;
+
+  if (type.startsWith("landscape")) {
+    facing = "landscape";
+    landscapeSide = type === "landscape-secondary" ? "secondary" : "primary";
+  } else if (type.startsWith("portrait")) {
+    facing = "portrait";
+    portraitInverted = type === "portrait-secondary";
+  } else if (window.matchMedia("(orientation: landscape)").matches) {
+    facing = "landscape";
+  } else if (window.matchMedia("(orientation: portrait)").matches) {
+    facing = "portrait";
+  } else {
+    const width = window.visualViewport?.width ?? window.innerWidth;
+    const height = window.visualViewport?.height ?? window.innerHeight;
+    facing = width >= height ? "landscape" : "portrait";
+  }
+
+  // Angle fills in left/right when the type string is missing or generic.
+  if (facing === "landscape") {
+    if (type !== "landscape-primary" && type !== "landscape-secondary") {
+      landscapeSide = angle === 270 || angle === 180 ? "secondary" : "primary";
+    }
+    if (angle === 0) angle = landscapeSide === "secondary" ? 270 : 90;
+  } else {
+    if (type !== "portrait-primary" && type !== "portrait-secondary") {
+      portraitInverted = angle === 180;
+    }
+    if (angle === 90 || angle === 270) angle = portraitInverted ? 180 : 0;
+  }
+
+  return { facing, angle, landscapeSide, portraitInverted, type };
+}
+
+/**
+ * Quarter-turns clockwise so a still matches the held phone.
+ * Landscape-right (primary) and landscape-left (secondary) share the same aspect,
+ * so secondary adds a half-turn or the still looks flipped.
  */
 export function quarterTurnsToMatch(
   width: number,
   height: number,
   facing: ResolvedOrientation,
   screenAngle = 0,
+  landscapeSide: LandscapeSide = "primary",
+  portraitInverted = false,
 ): 0 | 1 | 2 | 3 {
   const isLandscape = width >= height;
   const wantLandscape = facing === "landscape";
-  if (isLandscape === wantLandscape) return 0;
+  // First fix aspect with a single quarter turn when needed (primary / upright sense).
+  let turns = isLandscape === wantLandscape ? 0 : 1;
+
   const angle = ((screenAngle % 360) + 360) % 360;
-  if (wantLandscape) {
-    // Portrait pixels → landscape print
-    if (angle === 270) return 3;
-    return 1;
-  }
-  // Landscape pixels → portrait print
-  if (angle === 90) return 3;
-  if (angle === 270) return 1;
-  if (angle === 180) return 2;
-  return 1;
+  const secondary =
+    wantLandscape && (landscapeSide === "secondary" || angle === 270);
+  const inverted = !wantLandscape && (portraitInverted || angle === 180);
+
+  // Opposite landscape / upside-down portrait = same aspect, opposite "up".
+  if (secondary || inverted) turns = (turns + 2) % 4;
+
+  return turns as 0 | 1 | 2 | 3;
 }
 
 async function canvasToJpeg(canvas: HTMLCanvasElement, quality = 0.92) {
@@ -99,12 +154,19 @@ export async function normalizeStillToOrientation(
   width: number;
   height: number;
 }> {
+  const rotation = readDeviceRotation();
   const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   try {
-    let turns = quarterTurnsToMatch(bitmap.width, bitmap.height, facing, screenOrientationAngle());
-    // Guaranteed aspect match: if the angle heuristic picked a no-op incorrectly, force one quarter turn.
+    let turns = quarterTurnsToMatch(
+      bitmap.width,
+      bitmap.height,
+      facing,
+      rotation.angle,
+      rotation.landscapeSide,
+      rotation.portraitInverted,
+    );
     if (turns === 0 && !aspectMatches(bitmap.width, bitmap.height, facing)) {
-      turns = 1;
+      turns = facing === "landscape" && rotation.landscapeSide === "secondary" ? 3 : 1;
     }
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");

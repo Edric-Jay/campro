@@ -14,19 +14,22 @@ describe("still orientation", () => {
     expect(resolveCaptureOrientation("auto", { clientWidth: 800, clientHeight: 400 })).toBe("landscape");
   });
 
-  it("leaves matching aspects alone", () => {
-    expect(quarterTurnsToMatch(1920, 1080, "landscape", 90)).toBe(0);
-    expect(quarterTurnsToMatch(1080, 1920, "portrait", 0)).toBe(0);
+  it("keeps landscape-right stills upright when the aspect already matches", () => {
+    expect(quarterTurnsToMatch(1920, 1080, "landscape", 90, "primary")).toBe(0);
   });
 
-  it("rotates portrait sensor stills for landscape prints", () => {
-    expect(quarterTurnsToMatch(1080, 1920, "landscape", 90)).toBe(1);
-    expect(quarterTurnsToMatch(1080, 1920, "landscape", 270)).toBe(3);
+  it("half-turns landscape-left stills that already look landscape (otherwise they look flipped)", () => {
+    expect(quarterTurnsToMatch(1920, 1080, "landscape", 270, "secondary")).toBe(2);
+    expect(quarterTurnsToMatch(1920, 1080, "landscape", 270)).toBe(2);
+  });
+
+  it("rotates portrait sensor stills for both landscape sides", () => {
+    expect(quarterTurnsToMatch(1080, 1920, "landscape", 90, "primary")).toBe(1);
+    expect(quarterTurnsToMatch(1080, 1920, "landscape", 270, "secondary")).toBe(3);
   });
 
   it("rotates landscape sensor stills for portrait prints", () => {
-    expect(quarterTurnsToMatch(1920, 1080, "portrait", 0)).toBe(1);
-    expect(quarterTurnsToMatch(1920, 1080, "portrait", 90)).toBe(3);
-    expect(quarterTurnsToMatch(1920, 1080, "portrait", 270)).toBe(1);
+    expect(quarterTurnsToMatch(1920, 1080, "portrait", 0, "primary", false)).toBe(1);
+    expect(quarterTurnsToMatch(1920, 1080, "portrait", 180, "primary", true)).toBe(3);
   });
 });
