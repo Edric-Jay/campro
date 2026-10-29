@@ -40,7 +40,7 @@ export function FramePicker({
         </div>
       </div>
       <p className="text-[11px] leading-snug text-paper/45">
-        Preview follows the phone as you rotate. Auto matches that on capture. Portrait or Landscape locks only the saved print shape.
+        Captures match the live preview as you rotate the phone, like a stock camera. Auto uses that orientation. Portrait or Landscape locks only the saved print shape.
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FRAMES.map((frame) => (

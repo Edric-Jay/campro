@@ -203,7 +203,8 @@ export class BrowserCameraBackend {
       try {
         const blob = await this.capture.takePhoto(stillOptions);
         if (blob.size > 0) {
-          const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+          // Keep sensor-oriented dimensions (same as the live video). EXIF uprighting is applied later only if needed to match the video.
+          const bitmap = await createImageBitmap(blob);
           const size = { width: bitmap.width, height: bitmap.height };
           bitmap.close();
           return { blob, ...size, source: "image-capture", stillOptions, trackSettings };

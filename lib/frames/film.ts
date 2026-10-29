@@ -116,7 +116,8 @@ function drawSprockets(
 
 export async function applyFilmFrame(blob: Blob, frameId: FrameId, orientation: FrameOrientation) {
   if (frameId === "none") return blob;
-  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+  // Stills are already baked upright to match the live preview — do not re-apply EXIF.
+  const bitmap = await createImageBitmap(blob);
   try {
     const facing = resolveOrientation(orientation, bitmap.width, bitmap.height);
     const layout = frameLayout(frameId, facing);

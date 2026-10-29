@@ -5,11 +5,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { kelvinGains } from "@/lib/lut/color";
 import { builtinLuts } from "@/lib/lut/builtin";
-import { canvasToJpeg } from "@/lib/lut/renderer";
+import { canvasToJpeg, coverCrop } from "@/lib/lut/renderer";
 import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
-import { layoutOrientation, normalizeStillToOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
+import { layoutOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
+import {
+  decodeStillLikeVideo,
+  previewOutputSize,
+  rasterizePreviewStill,
+} from "@/lib/camera/preview-still";
 import type { ResolvedOrientation } from "@/lib/frames/film";
 import { buildStillOptions } from "@/lib/camera/still-options";
 import { exposureSummary } from "@/lib/camera/summary";
@@ -60,19 +65,6 @@ async function downscaleJpeg(blob: Blob, maxEdge = 360) {
   } finally {
     bitmap.close();
   }
-}
-
-async function ensureJpeg(blob: Blob) {
-  if (blob.type === "image/jpeg") return blob;
-  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
-  const canvas = document.createElement("canvas");
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Could not encode JPEG.");
-  context.drawImage(bitmap, 0, 0);
-  bitmap.close();
-  return canvasToJpeg(canvas, 0.92);
 }
 
 export function CameraShell() {
@@ -217,41 +209,51 @@ export function CameraShell() {
     if (!camera.probe || !lut) throw new Error("The camera is not ready.");
     const stillOptions = buildStillOptions(settings, camera.probe);
     const original = await camera.captureOriginal(stillOptions);
-    // Auto follows the live preview facing (same box AspectPreview uses). Locked Portrait/Landscape win.
+    // Match native phone cameras / Redmi watermark: bake the same upright crop the live preview shows.
+    // Do not re-orient via EXIF heuristics — that fights the sensor-fixed preview.
+    const viewCanvas = view.canvasRef.current;
+    const video = camera.videoRef.current;
+    const previewWidth = Math.max(2, viewCanvas?.clientWidth || window.innerWidth);
+    const previewHeight = Math.max(2, viewCanvas?.clientHeight || window.innerHeight);
     const printOrientation = resolveCaptureOrientation(
       settings.frameOrientation,
       previewFacingRef.current,
-      view.canvasRef.current,
+      viewCanvas,
     );
     let graded: Blob;
     let gradedNote: string;
     let stillWidth = original.width;
     let stillHeight = original.height;
-    if (view.kind === "none" || !view.rendererRef.current) {
-      graded = await ensureJpeg(original.blob);
-      gradedNote = "Look was not applied because WebGL is unavailable. The saved JPEG is ungraded.";
-    } else {
-      const bitmap = await createImageBitmap(original.blob, { imageOrientation: "from-image" });
-      try {
+    const bitmap = await decodeStillLikeVideo(
+      original.blob,
+      video?.videoWidth ?? original.width,
+      video?.videoHeight ?? original.height,
+    );
+    try {
+      const out = previewOutputSize(bitmap.width, bitmap.height, previewWidth, previewHeight);
+      const crop = coverCrop(bitmap.width, bitmap.height, out.width, out.height);
+      if (view.kind === "none" || !view.rendererRef.current) {
+        const raster = await rasterizePreviewStill(bitmap, previewWidth, previewHeight);
+        graded = raster.blob;
+        stillWidth = raster.width;
+        stillHeight = raster.height;
+        gradedNote = "Look was not applied because WebGL is unavailable. The saved JPEG matches the preview crop.";
+      } else {
         view.rendererRef.current.setLut(lut);
-        graded = await view.rendererRef.current.gradeSource(bitmap, bitmap.width, bitmap.height, {
+        graded = await view.rendererRef.current.gradeSource(bitmap, out.width, out.height, {
           intensity: settings.lutIntensity / 100,
           mirror: false,
           wbGains: gains,
-          crop: { u0: 0, v0: 0, u1: 1, v1: 1 },
+          crop,
         });
-        stillWidth = bitmap.width;
-        stillHeight = bitmap.height;
-      } finally {
-        bitmap.close();
+        stillWidth = out.width;
+        stillHeight = out.height;
+        gradedNote =
+          "Graded JPEG matching the live preview crop and orientation. This is not a RAW file.";
       }
-      gradedNote =
-        "Graded JPEG from the captured frame. This is not a RAW file. The viewfinder crop is not baked into the file.";
+    } finally {
+      bitmap.close();
     }
-    const oriented = await normalizeStillToOrientation(graded, printOrientation);
-    graded = oriented.blob;
-    stillWidth = oriented.width;
-    stillHeight = oriented.height;
     if (settings.frameId !== "none") {
       graded = await applyFilmFrame(graded, settings.frameId, printOrientation);
       const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
