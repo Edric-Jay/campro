@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { currentViewOrientation } from "@/lib/camera/orientation";
-import { imageWindowAspect, type FrameId, type FrameOrientation } from "@/lib/frames/film";
+import { imageWindowAspect, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 
 function readBox(node: HTMLElement) {
   const rect = node.getBoundingClientRect();
@@ -57,11 +57,10 @@ export function AspectPreview({
     };
   }, [frameId, clearChrome]);
 
+  // Preview always follows the phone. Locked print orientation only affects capture.
   const screenOrientation =
     box.width > 2 && box.height > 2
-      ? box.width >= box.height
-        ? "landscape"
-        : "portrait"
+      ? resolveOrientation("auto", box.width, box.height)
       : currentViewOrientation();
   const aspect = frameId === "none" ? null : imageWindowAspect(frameId, screenOrientation);
 

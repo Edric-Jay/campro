@@ -9,11 +9,7 @@ import { canvasToJpeg } from "@/lib/lut/renderer";
 import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
-import {
-  currentViewOrientation,
-  normalizeStillToOrientation,
-  resolvePrintOrientation,
-} from "@/lib/camera/orientation";
+import { normalizeStillToOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
 import { buildStillOptions } from "@/lib/camera/still-options";
 import { exposureSummary } from "@/lib/camera/summary";
 import { shutterById } from "@/lib/camera/stops";
@@ -219,8 +215,9 @@ export function CameraShell() {
     if (!camera.probe || !lut) throw new Error("The camera is not ready.");
     const stillOptions = buildStillOptions(settings, camera.probe);
     const original = await camera.captureOriginal(stillOptions);
-    const viewFacing = currentViewOrientation();
-    const printOrientation = resolvePrintOrientation(settings.frameOrientation);
+    // Use the live viewfinder box (same signal as the preview) so Auto matches what you see.
+    // Locked Portrait/Landscape always wins. Normalize the still to that same facing before framing.
+    const printOrientation = resolveCaptureOrientation(settings.frameOrientation, view.canvasRef.current);
     let graded: Blob;
     let gradedNote: string;
     let stillWidth = original.width;
@@ -246,8 +243,7 @@ export function CameraShell() {
       gradedNote =
         "Graded JPEG from the captured frame. This is not a RAW file. The viewfinder crop is not baked into the file.";
     }
-    // Phone cameras often keep sensor pixels while the UI rotates; match the held orientation.
-    const oriented = await normalizeStillToOrientation(graded, viewFacing);
+    const oriented = await normalizeStillToOrientation(graded, printOrientation);
     graded = oriented.blob;
     stillWidth = oriented.width;
     stillHeight = oriented.height;
