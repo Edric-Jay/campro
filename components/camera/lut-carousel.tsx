@@ -1,25 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { LOOKS } from "@/lib/lut/builtin";
+import { BUILTIN_LOOK_INDEX, LOOKS } from "@/lib/lut/builtin";
 import type { Rgb } from "@/lib/lut/color";
 import { gradeBuiltinColor, gradeSample, type Lut3D } from "@/lib/lut/grade";
 import type { AppSettings } from "@/lib/storage/settings";
-
-const BUILTIN_LOOK_INDEX: Record<string, number> = {
-  natural: 0,
-  cinema: 1,
-  "golden-teal": 2,
-  "deep-blue": 3,
-  "clean-blue": 4,
-  "faded-film": 5,
-  "warm-film": 6,
-  "soft-film": 7,
-  portrait: 8,
-  "cinema-soft": 9,
-  "bleach-bypass": 10,
-  monochrome: 11,
-};
 
 const PREVIEW_WIDTH = 120;
 const PREVIEW_HEIGHT = 80;

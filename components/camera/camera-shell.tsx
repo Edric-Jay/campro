@@ -6,6 +6,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { kelvinGains } from "@/lib/lut/color";
 import { builtinLuts } from "@/lib/lut/builtin";
 import { canvasToJpeg } from "@/lib/lut/renderer";
+import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
 import { buildStillOptions } from "@/lib/camera/still-options";
@@ -16,6 +17,8 @@ import { readPlatformStatus } from "@/lib/camera/browser-backend";
 import type { AppSettings } from "@/lib/storage/settings";
 import type { CaptureRecord } from "@/lib/storage/records";
 import { listCaptures, saveCapture } from "@/lib/storage/db";
+import { FrameOverlay } from "./frame-overlay";
+import { FramePicker } from "./frame-picker";
 import { LutCarousel } from "./lut-carousel";
 import { OverlayLayer, type FocusMark } from "./overlay";
 import { ProPanel } from "./pro-panel";
@@ -229,6 +232,11 @@ export function CameraShell() {
       }
       gradedNote =
         "Graded JPEG from the captured frame. This is not a RAW file. The viewfinder crop is not baked into the file.";
+      if (settings.frameId !== "none") {
+        graded = await applyFilmFrame(graded, settings.frameId, settings.frameOrientation);
+        const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
+        gradedNote = `${gradedNote} Printed with the ${frameName} frame, ${settings.frameOrientation} orientation.`;
+      }
     }
     const thumbnail = await downscaleJpeg(graded);
     const record: CaptureRecord = {
@@ -499,6 +507,9 @@ export function CameraShell() {
               className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full opacity-0"}
             />
             <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
+            {settings.captureMode === "photo" ? (
+              <FrameOverlay frameId={settings.frameId} orientation={settings.frameOrientation} />
+            ) : null}
             <OverlayLayer
               settings={settings}
               analysis={view.analysis}
@@ -577,6 +588,12 @@ export function CameraShell() {
                 onDelete={(id) => void store.deleteCustomLut(id)}
               />
             </div>
+            <FramePicker
+              frameId={settings.frameId}
+              orientation={settings.frameOrientation}
+              onFrame={(frameId) => store.update({ frameId })}
+              onOrientation={(frameOrientation) => store.update({ frameOrientation })}
+            />
             <p className="px-3 pb-1 font-mono text-[10px] tracking-widest text-paper/60 uppercase">{summary}</p>
             {dock(true)}
           </div>
@@ -600,6 +617,12 @@ export function CameraShell() {
             </div>
             {drawer === "looks" ? (
               <div className="pb-3">
+                <FramePicker
+                  frameId={settings.frameId}
+                  orientation={settings.frameOrientation}
+                  onFrame={(frameId) => store.update({ frameId })}
+                  onOrientation={(frameOrientation) => store.update({ frameOrientation })}
+                />
                 <LutCarousel
                   luts={luts}
                   settings={settings}

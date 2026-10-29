@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeSample, bakeLut } from "./grade";
+import { gradeBuiltinColor, gradeSample, bakeLut } from "./grade";
 import { parseCube, CubeParseError } from "./cube";
 
 const cube2 = `TITLE "test"
@@ -56,5 +56,18 @@ describe("grade intensity", () => {
     const graded = gradeSample(lut, original, 1);
     expect(graded).not.toEqual(original);
     expect(gradeSample(lut, original, 0)).toEqual(original);
+  });
+
+  it("applies the Chrome profile as a cooler grade", () => {
+    const graded = gradeBuiltinColor([0.5, 0.5, 0.5], 12);
+    expect(graded[2]).toBeGreaterThan(graded[0]);
+  });
+
+  it("renders Mono and Noir as gray", () => {
+    for (const look of [14, 20]) {
+      const graded = gradeBuiltinColor([0.2, 0.7, 0.4], look);
+      expect(graded[0]).toBeCloseTo(graded[1], 5);
+      expect(graded[1]).toBeCloseTo(graded[2], 5);
+    }
   });
 });

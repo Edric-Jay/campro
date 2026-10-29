@@ -1,3 +1,4 @@
+import { BUILTIN_LOOK_INDEX } from "./builtin";
 import type { Lut3D } from "./grade";
 import type { Rgb } from "./color";
 
@@ -9,21 +10,6 @@ export interface DrawState {
   wbGains: Rgb;
   crop: { u0: number; v0: number; u1: number; v1: number };
 }
-
-const BUILTIN_LOOK_INDEX: Record<string, number> = {
-  natural: 0,
-  cinema: 1,
-  "golden-teal": 2,
-  "deep-blue": 3,
-  "clean-blue": 4,
-  "faded-film": 5,
-  "warm-film": 6,
-  "soft-film": 7,
-  portrait: 8,
-  "cinema-soft": 9,
-  "bleach-bypass": 10,
-  monochrome: 11,
-};
 
 const VERT_1 = `
 attribute vec2 aPosition;
@@ -90,9 +76,46 @@ vec3 grade(vec3 c, float look) {
   } else if (look < 10.5) {
     result = (c - 0.5) * 1.32 + 0.5;
     result = mix(vec3(l), result, 0.4);
-  } else {
+  } else if (look < 11.5) {
     float g = clamp((l - 0.5) * 1.15 + 0.5, 0.0, 1.0);
     result = vec3(g);
+  } else if (look < 12.5) {
+    result = c * vec3(0.91, 1.01, 1.10);
+    result += vec3(0.035, 0.012, -0.008) * l;
+  } else if (look < 13.5) {
+    result = (c * vec3(1.09, 1.015, 0.91) - 0.5) * 0.88 + 0.53;
+  } else if (look < 14.5) {
+    float g = (l - 0.5) * 1.13 + 0.5;
+    result = vec3(g);
+  } else if (look < 15.5) {
+    result = c * vec3(1.12, 1.02, 0.86);
+    result += vec3(0.045, 0.018, -0.025) * l;
+  } else if (look < 16.5) {
+    result = (c - 0.5) * 1.18 + 0.5;
+    result = mix(vec3(l), result * vec3(1.04, 1.0, 0.96), 0.8);
+  } else if (look < 17.5) {
+    result = c * vec3(0.96, 1.08, 0.91);
+    result.g += 0.025 * (1.0 - l);
+  } else if (look < 18.5) {
+    result = c + vec3(0.0, 0.025, 0.045) * (1.0 - l);
+    result.r += 0.055 * l;
+    result.b *= 0.94;
+  } else if (look < 19.5) {
+    result = (c - 0.5) * 0.78 + 0.55;
+    result = mix(result, vec3(l) * 0.8 + 0.15, 0.15);
+  } else if (look < 20.5) {
+    float g = clamp((l - 0.5) * 1.45 + 0.5, 0.0, 1.0);
+    result = vec3(g);
+  } else if (look < 21.5) {
+    result = c * vec3(0.88, 1.04, 1.15);
+    result += vec3(-0.015, 0.015, 0.035);
+  } else if (look < 22.5) {
+    result = c * vec3(1.10, 1.02, 0.88);
+    result = (result - 0.5) * 0.85 + 0.55;
+  } else {
+    result = mix(c, vec3(l), 0.18);
+    result = result * 0.88 + 0.08;
+    result += vec3(0.045, 0.015, 0.035);
   }
   return clamp(result, 0.0, 1.0);
 }

@@ -8,6 +8,7 @@ import type {
   OutputFormat,
   WhiteBalanceChoice,
 } from "@/lib/camera/types";
+import { isFrameId, isFrameOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 
 export interface AppSettings {
   lutId: string;
@@ -47,6 +48,8 @@ export interface AppSettings {
   favorites: string[];
   recents: string[];
   previewMagnify: boolean;
+  frameId: FrameId;
+  frameOrientation: FrameOrientation;
 }
 
 export interface Preset {
@@ -108,6 +111,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   favorites: [],
   recents: ["natural"],
   previewMagnify: false,
+  frameId: "none",
+  frameOrientation: "auto",
 };
 
 const FACING = new Set<FacingMode>(["user", "environment"]);
@@ -203,6 +208,11 @@ export function sanitizeSettings(input: unknown): AppSettings {
     favorites: strings(raw.favorites),
     recents: strings(raw.recents),
     previewMagnify: flag(raw.previewMagnify, false),
+    frameId: typeof raw.frameId === "string" && isFrameId(raw.frameId) ? raw.frameId : "none",
+    frameOrientation:
+      typeof raw.frameOrientation === "string" && isFrameOrientation(raw.frameOrientation)
+        ? raw.frameOrientation
+        : "auto",
   };
 }
 

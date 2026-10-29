@@ -162,7 +162,23 @@ export const LOOKS: LookDefinition[] = [
       monochrome: true,
     },
   },
+  { id: "chrome", name: "Chrome", note: "Cool / Contrast", params: neutral },
+  { id: "portra", name: "Portra", note: "Warm / Soft", params: neutral },
+  { id: "silver", name: "Mono", note: "Silver / B&W", params: { ...neutral, monochrome: true } },
+  { id: "golden", name: "Golden", note: "Amber / Warm", params: neutral },
+  { id: "ektar", name: "Ektar", note: "Rich / Vivid", params: neutral },
+  { id: "fuji", name: "Fuji", note: "Olive / Green", params: neutral },
+  { id: "cine-teal", name: "Cine Teal", note: "Cool / Cinematic", params: neutral },
+  { id: "faded", name: "Faded", note: "Matte / Muted", params: neutral },
+  { id: "noir", name: "Noir", note: "Deep / B&W", params: { ...neutral, monochrome: true } },
+  { id: "arctic", name: "Arctic", note: "Blue / Cool", params: neutral },
+  { id: "vintage", name: "Vintage", note: "Sepia / Soft", params: neutral },
+  { id: "pastel", name: "Pastel", note: "Airy / Soft", params: neutral },
 ];
+
+export const BUILTIN_LOOK_INDEX: Record<string, number> = Object.fromEntries(
+  LOOKS.map((look, index) => [look.id, index]),
+);
 
 const cache = new Map<string, Lut3D>();
 

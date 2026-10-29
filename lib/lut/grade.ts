@@ -165,9 +165,42 @@ export function gradeBuiltinColor(rgb: Rgb, look: number): Rgb {
   else if (look < 8.5) result = contrast(scale3(rgb, [1.08, 1, 0.92]), 0.92, 0.51);
   else if (look < 9.5) result = contrast(scale3(rgb, [1.05, 1.01, 0.95]), 0.86, 0.52);
   else if (look < 10.5) result = mix3(luma, contrast(rgb, 1.32), 0.4);
-  else {
+  else if (look < 11.5) {
     const g = clamp01((l - 0.5) * 1.15 + 0.5);
     result = [g, g, g];
+  } else if (look < 12.5) {
+    result = scale3(rgb, [0.91, 1.01, 1.1]);
+    result = [result[0] + 0.035 * l, result[1] + 0.012 * l, result[2] - 0.008 * l];
+  } else if (look < 13.5) result = contrast(scale3(rgb, [1.09, 1.015, 0.91]), 0.88, 0.53);
+  else if (look < 14.5) {
+    const g = (l - 0.5) * 1.13 + 0.5;
+    result = [g, g, g];
+  } else if (look < 15.5) {
+    result = scale3(rgb, [1.12, 1.02, 0.86]);
+    result = [result[0] + 0.045 * l, result[1] + 0.018 * l, result[2] - 0.025 * l];
+  } else if (look < 16.5) {
+    result = contrast(rgb, 1.18);
+    result = mix3(luma, scale3(result, [1.04, 1, 0.96]), 0.8);
+  } else if (look < 17.5) {
+    result = scale3(rgb, [0.96, 1.08, 0.91]);
+    result = [result[0], result[1] + 0.025 * (1 - l), result[2]];
+  } else if (look < 18.5) {
+    result = [
+      rgb[0] + 0.055 * l,
+      rgb[1] + 0.025 * (1 - l),
+      (rgb[2] + 0.045 * (1 - l)) * 0.94,
+    ];
+  } else if (look < 19.5) result = mix3(contrast(rgb, 0.78, 0.55), [l * 0.8 + 0.15, l * 0.8 + 0.15, l * 0.8 + 0.15], 0.15);
+  else if (look < 20.5) {
+    const g = clamp01((l - 0.5) * 1.45 + 0.5);
+    result = [g, g, g];
+  } else if (look < 21.5) {
+    result = scale3(rgb, [0.88, 1.04, 1.15]);
+    result = [result[0] - 0.015, result[1] + 0.015, result[2] + 0.035];
+  } else if (look < 22.5) result = contrast(scale3(rgb, [1.1, 1.02, 0.88]), 0.85, 0.55);
+  else {
+    result = mix3(rgb, luma, 0.18);
+    result = [result[0] * 0.88 + 0.08 + 0.045, result[1] * 0.88 + 0.08 + 0.015, result[2] * 0.88 + 0.08 + 0.035];
   }
   return [clamp01(result[0]), clamp01(result[1]), clamp01(result[2])];
 }
