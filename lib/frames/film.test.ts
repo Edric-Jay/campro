@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameLayout, resolveOrientation } from "./film";
+import { frameLayout, imageWindowAspect, resolveOrientation } from "./film";
 
 describe("film frames", () => {
   it("follows the photo aspect unless portrait or landscape is chosen", () => {
@@ -21,6 +21,10 @@ describe("film frames", () => {
         expect(windowHeight).toBeGreaterThan(0.5);
         if (orientation === "landscape") expect(layout.outerAspect).toBeGreaterThan(1);
         else expect(layout.outerAspect).toBeLessThan(1);
+        const aspect = imageWindowAspect(id, orientation);
+        expect(aspect).toBeCloseTo((layout.outerAspect * windowWidth) / windowHeight, 5);
+        if (orientation === "landscape") expect(aspect).toBeGreaterThan(1);
+        else expect(aspect).toBeLessThanOrEqual(1.05);
       }
     }
   });

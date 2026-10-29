@@ -46,6 +46,15 @@ export function resolveOrientation(orientation: FrameOrientation, width: number,
   return width >= height ? "landscape" : "portrait";
 }
 
+/** Aspect of the printable image window (W/H), without the paper border. */
+export function imageWindowAspect(id: FrameId, orientation: ResolvedOrientation): number | null {
+  const layout = frameLayout(id, orientation);
+  if (!layout) return null;
+  const width = 1 - layout.padLeft - layout.padRight;
+  const height = 1 - layout.padTop - layout.padBottom;
+  return (layout.outerAspect * width) / height;
+}
+
 export function frameLayout(id: FrameId, orientation: ResolvedOrientation): FrameLayout | null {
   if (id === "none") return null;
   const landscape = orientation === "landscape";

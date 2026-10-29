@@ -17,7 +17,7 @@ import { readPlatformStatus } from "@/lib/camera/browser-backend";
 import type { AppSettings } from "@/lib/storage/settings";
 import type { CaptureRecord } from "@/lib/storage/records";
 import { listCaptures, saveCapture } from "@/lib/storage/db";
-import { FrameOverlay } from "./frame-overlay";
+import { AspectPreview } from "./frame-overlay";
 import { FramePicker } from "./frame-picker";
 import { LutCarousel } from "./lut-carousel";
 import { OverlayLayer, type FocusMark } from "./overlay";
@@ -235,7 +235,7 @@ export function CameraShell() {
       if (settings.frameId !== "none") {
         graded = await applyFilmFrame(graded, settings.frameId, settings.frameOrientation);
         const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
-        gradedNote = `${gradedNote} Printed with the ${frameName} frame, ${settings.frameOrientation} orientation.`;
+        gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${settings.frameOrientation} orientation.`;
       }
     }
     const thumbnail = await downscaleJpeg(graded);
@@ -450,54 +450,57 @@ export function CameraShell() {
         ["--cam-bottom" as string]: "calc(8.25rem + env(safe-area-inset-bottom))",
       }}
     >
-      <div className="absolute inset-0" onPointerDown={onViewTap}>
-        <video
-          ref={camera.videoRef}
-          playsInline
-          muted
-          autoPlay
-          data-testid="camera-video"
-          className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full object-cover opacity-0"}
-        />
-        <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
-        {settings.captureMode === "photo" ? (
-          <FrameOverlay frameId={settings.frameId} orientation={settings.frameOrientation} clearChrome={chrome} />
-        ) : null}
-        <OverlayLayer
-          settings={settings}
-          analysis={view.analysis}
-          focus={focus}
-          tilt={tilt}
-          levelPermission={levelPermission}
-          onAskLevel={() => void askLevel()}
-        />
-        {camera.phase !== "live" && camera.phase !== "idle" && camera.phase !== "requesting" ? (
-          <div className="absolute inset-0 z-20 grid content-center justify-items-center gap-3 bg-ink/80 px-6 text-center">
-            <p className="max-w-xs text-sm">{camera.message}</p>
-            <button type="button" className="min-h-10 rounded-full border border-paper/30 px-4" onClick={() => void camera.retry()}>
-              Try again
-            </button>
-          </div>
-        ) : null}
-        {countdown !== null ? <p className="pointer-events-none absolute inset-0 z-20 grid place-items-center font-mono text-6xl">{countdown}</p> : null}
-        {longExposure ? (
-          <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-1/2 z-20 -translate-x-1/2 font-mono text-xs tracking-widest uppercase">
-            Exposing {shutterById(settings.shutterId).label}
-          </p>
-        ) : null}
-        {recording ? <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 font-mono text-xs text-danger">Rec {Math.floor(elapsed / 1000).toString().padStart(2, "0")}s</p> : null}
-        {view.slow && !drawer ? (
-          <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 text-[10px] tracking-widest text-amber uppercase">Preview running slow</p>
-        ) : null}
-        {(notice || store.notice) && chrome ? (
-          <p className="pointer-events-none absolute top-[var(--cam-top)] right-3 left-3 z-20 text-xs text-paper/80">{notice || store.notice}</p>
-        ) : null}
-        {settings.facingMode === "user" && chrome ? (
-          <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-3 z-20 pb-1 font-mono text-[9px] tracking-widest text-paper/50 uppercase">
-            Front preview is a mirror. Saved photos are not.
-          </p>
-        ) : null}
-      </div>
+      <AspectPreview
+        frameId={settings.captureMode === "photo" ? settings.frameId : "none"}
+        orientation={settings.frameOrientation}
+        clearChrome={chrome}
+      >
+        <div className="absolute inset-0" onPointerDown={onViewTap}>
+          <video
+            ref={camera.videoRef}
+            playsInline
+            muted
+            autoPlay
+            data-testid="camera-video"
+            className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full object-cover opacity-0"}
+          />
+          <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
+          <OverlayLayer
+            settings={settings}
+            analysis={view.analysis}
+            focus={focus}
+            tilt={tilt}
+            levelPermission={levelPermission}
+            onAskLevel={() => void askLevel()}
+          />
+        </div>
+      </AspectPreview>
+      {camera.phase !== "live" && camera.phase !== "idle" && camera.phase !== "requesting" ? (
+        <div className="absolute inset-0 z-20 grid content-center justify-items-center gap-3 bg-ink/80 px-6 text-center">
+          <p className="max-w-xs text-sm">{camera.message}</p>
+          <button type="button" className="min-h-10 rounded-full border border-paper/30 px-4" onClick={() => void camera.retry()}>
+            Try again
+          </button>
+        </div>
+      ) : null}
+      {countdown !== null ? <p className="pointer-events-none absolute inset-0 z-20 grid place-items-center font-mono text-6xl">{countdown}</p> : null}
+      {longExposure ? (
+        <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-1/2 z-20 -translate-x-1/2 font-mono text-xs tracking-widest uppercase">
+          Exposing {shutterById(settings.shutterId).label}
+        </p>
+      ) : null}
+      {recording ? <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 font-mono text-xs text-danger">Rec {Math.floor(elapsed / 1000).toString().padStart(2, "0")}s</p> : null}
+      {view.slow && !drawer ? (
+        <p className="pointer-events-none absolute top-[var(--cam-top)] left-3 z-20 text-[10px] tracking-widest text-amber uppercase">Preview running slow</p>
+      ) : null}
+      {(notice || store.notice) && chrome ? (
+        <p className="pointer-events-none absolute top-[var(--cam-top)] right-3 left-3 z-20 text-xs text-paper/80">{notice || store.notice}</p>
+      ) : null}
+      {settings.facingMode === "user" && chrome ? (
+        <p className="pointer-events-none absolute bottom-[var(--cam-bottom)] left-3 z-20 pb-1 font-mono text-[9px] tracking-widest text-paper/50 uppercase">
+          Front preview is a mirror. Saved photos are not.
+        </p>
+      ) : null}
 
       {chrome ? (
         <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-ink/80 to-transparent px-3 pt-[max(12px,env(safe-area-inset-top))] pb-6">
@@ -550,8 +553,8 @@ export function CameraShell() {
               Video
             </button>
           </div>
-          <div className="grid grid-cols-[3rem_minmax(0,1fr)_5.75rem_2.75rem] items-center gap-1">
-            <Link href="/gallery" data-testid="last-capture" className="h-12 w-12 overflow-hidden border border-paper/20 bg-black">
+          <div className="relative flex h-16 items-center">
+            <Link href="/gallery" data-testid="last-capture" className="absolute left-0 z-10 h-12 w-12 overflow-hidden border border-paper/20 bg-black">
               {thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={thumb.url} alt="Latest capture" className="h-full w-full object-cover" />
@@ -569,27 +572,29 @@ export function CameraShell() {
                 event.preventDefault();
                 void shutter();
               }}
-              className="mx-auto grid h-16 w-16 place-items-center rounded-full border-2 border-paper/80 disabled:opacity-40"
+              className="absolute left-1/2 z-10 grid h-16 w-16 -translate-x-1/2 place-items-center rounded-full border-2 border-paper/80 disabled:opacity-40"
             >
               <span className={`block h-12 w-12 rounded-full ${recording ? "h-5 w-5 bg-danger" : settings.captureMode === "video" ? "bg-danger" : "bg-paper"}`} />
             </button>
-            <button
-              type="button"
-              aria-pressed={drawer === "looks"}
-              className="line-clamp-2 text-right font-mono text-[11px] leading-tight uppercase"
-              onClick={() => setDrawer((current) => (current === "looks" ? null : "looks"))}
-            >
-              {lut?.name ?? "Looks"}
-            </button>
-            <button
-              type="button"
-              data-testid="pro-toggle"
-              aria-pressed={drawer === "pro"}
-              className="text-right font-mono text-[10px] tracking-widest uppercase"
-              onClick={() => setDrawer((current) => (current === "pro" ? null : "pro"))}
-            >
-              Pro
-            </button>
+            <div className="absolute right-0 z-10 flex max-w-[38%] flex-col items-end gap-1">
+              <button
+                type="button"
+                aria-pressed={drawer === "looks"}
+                className="max-w-full truncate font-mono text-[11px] leading-tight uppercase"
+                onClick={() => setDrawer((current) => (current === "looks" ? null : "looks"))}
+              >
+                {lut?.name ?? "Looks"}
+              </button>
+              <button
+                type="button"
+                data-testid="pro-toggle"
+                aria-pressed={drawer === "pro"}
+                className="font-mono text-[10px] tracking-widest uppercase"
+                onClick={() => setDrawer((current) => (current === "pro" ? null : "pro"))}
+              >
+                Pro
+              </button>
+            </div>
           </div>
         </nav>
       ) : null}

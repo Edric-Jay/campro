@@ -39,6 +39,9 @@ export function FramePicker({
           ))}
         </div>
       </div>
+      <p className="font-mono text-[10px] leading-snug text-paper/45">
+        Preview shows the print window only. The paper border is added after capture. Landscape assumes you rotate the phone.
+      </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FRAMES.map((frame) => (
           <button
@@ -46,7 +49,7 @@ export function FramePicker({
             type="button"
             aria-pressed={frameId === frame.id}
             className={`w-24 shrink-0 rounded-md border px-2 py-2 text-left ${
-              frameId === frame.id ? "border-sage" : "border-paper/15"
+              frameId === frame.id ? "border-sage bg-paper/10" : "border-paper/15"
             }`}
             onClick={() => onFrame(frame.id)}
           >
