@@ -18,17 +18,34 @@ export function viewfinderOrientation(canvas: { clientWidth: number; clientHeigh
   return canvas.clientWidth >= canvas.clientHeight ? "landscape" : "portrait";
 }
 
+/** Visible viewport aspect — matches CSS layout after rotate better than screen.orientation. */
+export function layoutOrientation(): ResolvedOrientation {
+  if (typeof window === "undefined") return "portrait";
+  const width = window.visualViewport?.width ?? window.innerWidth;
+  const height = window.visualViewport?.height ?? window.innerHeight;
+  if (width >= 2 && height >= 2) return width >= height ? "landscape" : "portrait";
+  if (window.matchMedia("(orientation: landscape)").matches) return "landscape";
+  if (window.matchMedia("(orientation: portrait)").matches) return "portrait";
+  return "portrait";
+}
+
 /** Phone / viewport orientation used when the viewfinder size is unavailable. */
 export function currentViewOrientation(): ResolvedOrientation {
   return readDeviceRotation().facing;
 }
 
+/**
+ * Auto follows the live preview facing when provided, then the viewfinder box, then layout.
+ * Locked Portrait/Landscape always win.
+ */
 export function resolveCaptureOrientation(
   setting: FrameOrientation,
+  previewFacing?: ResolvedOrientation | null,
   canvas?: { clientWidth: number; clientHeight: number } | null,
 ): ResolvedOrientation {
   if (setting === "portrait" || setting === "landscape") return setting;
-  return viewfinderOrientation(canvas) ?? currentViewOrientation();
+  if (previewFacing === "portrait" || previewFacing === "landscape") return previewFacing;
+  return viewfinderOrientation(canvas) ?? layoutOrientation();
 }
 
 export function screenOrientationAngle(): number {
@@ -36,9 +53,9 @@ export function screenOrientationAngle(): number {
 }
 
 /**
- * Read the OS orientation. Landscape left vs right is `landscape-secondary` vs
- * `landscape-primary` (or angle 270 vs 90) — both are landscape, but the still
- * needs a 180° difference between them.
+ * Read rotation for left/right landscape correction.
+ * Facing comes from the visible layout (same signal family as the preview), because
+ * `screen.orientation.type` often stays portrait on phones after rotate.
  */
 export function readDeviceRotation(): DeviceRotation {
   if (typeof window === "undefined") {
@@ -57,37 +74,21 @@ export function readDeviceRotation(): DeviceRotation {
     }
   }
 
-  let facing: ResolvedOrientation = "portrait";
+  const facing = layoutOrientation();
   let landscapeSide: LandscapeSide = "primary";
   let portraitInverted = false;
 
-  if (type.startsWith("landscape")) {
-    facing = "landscape";
-    landscapeSide = type === "landscape-secondary" ? "secondary" : "primary";
-  } else if (type.startsWith("portrait")) {
-    facing = "portrait";
-    portraitInverted = type === "portrait-secondary";
-  } else if (window.matchMedia("(orientation: landscape)").matches) {
-    facing = "landscape";
-  } else if (window.matchMedia("(orientation: portrait)").matches) {
-    facing = "portrait";
-  } else {
-    const width = window.visualViewport?.width ?? window.innerWidth;
-    const height = window.visualViewport?.height ?? window.innerHeight;
-    facing = width >= height ? "landscape" : "portrait";
-  }
+  if (type === "landscape-secondary") landscapeSide = "secondary";
+  else if (type === "landscape-primary") landscapeSide = "primary";
+  else if (facing === "landscape") landscapeSide = angle === 270 || angle === 180 ? "secondary" : "primary";
 
-  // Angle fills in left/right when the type string is missing or generic.
+  if (type === "portrait-secondary") portraitInverted = true;
+  else if (facing === "portrait") portraitInverted = angle === 180;
+
   if (facing === "landscape") {
-    if (type !== "landscape-primary" && type !== "landscape-secondary") {
-      landscapeSide = angle === 270 || angle === 180 ? "secondary" : "primary";
-    }
-    if (angle === 0) angle = landscapeSide === "secondary" ? 270 : 90;
-  } else {
-    if (type !== "portrait-primary" && type !== "portrait-secondary") {
-      portraitInverted = angle === 180;
-    }
-    if (angle === 90 || angle === 270) angle = portraitInverted ? 180 : 0;
+    if (angle === 0 || angle === 180) angle = landscapeSide === "secondary" ? 270 : 90;
+  } else if (angle === 90 || angle === 270) {
+    angle = portraitInverted ? 180 : 0;
   }
 
   return { facing, angle, landscapeSide, portraitInverted, type };
@@ -112,8 +113,7 @@ export function quarterTurnsToMatch(
   let turns = isLandscape === wantLandscape ? 0 : 1;
 
   const angle = ((screenAngle % 360) + 360) % 360;
-  const secondary =
-    wantLandscape && (landscapeSide === "secondary" || angle === 270);
+  const secondary = wantLandscape && (landscapeSide === "secondary" || angle === 270);
   const inverted = !wantLandscape && (portraitInverted || angle === 180);
 
   // Opposite landscape / upside-down portrait = same aspect, opposite "up".

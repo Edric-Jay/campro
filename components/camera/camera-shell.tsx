@@ -9,7 +9,8 @@ import { canvasToJpeg } from "@/lib/lut/renderer";
 import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
-import { normalizeStillToOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
+import { layoutOrientation, normalizeStillToOrientation, resolveCaptureOrientation } from "@/lib/camera/orientation";
+import type { ResolvedOrientation } from "@/lib/frames/film";
 import { buildStillOptions } from "@/lib/camera/still-options";
 import { exposureSummary } from "@/lib/camera/summary";
 import { shutterById } from "@/lib/camera/stops";
@@ -97,6 +98,7 @@ export function CameraShell() {
   const [levelPermission, setLevelPermission] = useState<"unknown" | "needed" | "granted" | "denied">("unknown");
   const cancelTimer = useRef(false);
   const shooting = useRef(false);
+  const previewFacingRef = useRef<ResolvedOrientation>(layoutOrientation());
   const keyActions = useRef({
     shutter: () => {},
     grid: () => {},
@@ -215,9 +217,12 @@ export function CameraShell() {
     if (!camera.probe || !lut) throw new Error("The camera is not ready.");
     const stillOptions = buildStillOptions(settings, camera.probe);
     const original = await camera.captureOriginal(stillOptions);
-    // Use the live viewfinder box (same signal as the preview) so Auto matches what you see.
-    // Locked Portrait/Landscape always wins. Normalize the still to that same facing before framing.
-    const printOrientation = resolveCaptureOrientation(settings.frameOrientation, view.canvasRef.current);
+    // Auto follows the live preview facing (same box AspectPreview uses). Locked Portrait/Landscape win.
+    const printOrientation = resolveCaptureOrientation(
+      settings.frameOrientation,
+      previewFacingRef.current,
+      view.canvasRef.current,
+    );
     let graded: Blob;
     let gradedNote: string;
     let stillWidth = original.width;
@@ -475,6 +480,7 @@ export function CameraShell() {
         frameId={settings.captureMode === "photo" ? settings.frameId : "none"}
         orientation={settings.frameOrientation}
         clearChrome={chrome}
+        previewFacingRef={previewFacingRef}
       >
         <div className="absolute inset-0" onPointerDown={onViewTap}>
           <video

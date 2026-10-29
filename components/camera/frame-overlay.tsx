@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { currentViewOrientation } from "@/lib/camera/orientation";
-import { imageWindowAspect, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
+import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { layoutOrientation } from "@/lib/camera/orientation";
+import { imageWindowAspect, resolveOrientation, type FrameId, type FrameOrientation, type ResolvedOrientation } from "@/lib/frames/film";
 
 function readBox(node: HTMLElement) {
   const rect = node.getBoundingClientRect();
@@ -13,14 +13,18 @@ export function AspectPreview({
   frameId,
   orientation,
   clearChrome = false,
+  previewFacingRef,
   children,
 }: {
   frameId: FrameId;
   orientation: FrameOrientation;
   clearChrome?: boolean;
+  /** Latest preview facing — capture Auto reads this so the print matches the live window. */
+  previewFacingRef?: MutableRefObject<ResolvedOrientation>;
   children: ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -57,12 +61,30 @@ export function AspectPreview({
     };
   }, [frameId, clearChrome]);
 
-  // Preview always follows the phone. Locked print orientation only affects capture.
+  // Preview always follows the phone box. Locked print orientation only affects capture.
   const screenOrientation =
-    box.width > 2 && box.height > 2
-      ? resolveOrientation("auto", box.width, box.height)
-      : currentViewOrientation();
+    box.width > 2 && box.height > 2 ? resolveOrientation("auto", box.width, box.height) : layoutOrientation();
   const aspect = frameId === "none" ? null : imageWindowAspect(frameId, screenOrientation);
+
+  useEffect(() => {
+    if (!previewFacingRef) return;
+    previewFacingRef.current = screenOrientation;
+  }, [previewFacingRef, screenOrientation]);
+
+  useEffect(() => {
+    if (!previewFacingRef) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const syncFromHost = () => {
+      const next = readBox(host);
+      if (next.width < 2 || next.height < 2) return;
+      previewFacingRef.current = next.width >= next.height ? "landscape" : "portrait";
+    };
+    syncFromHost();
+    const observer = new ResizeObserver(() => syncFromHost());
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [previewFacingRef, aspect, frameId]);
 
   return (
     <div
@@ -73,6 +95,7 @@ export function AspectPreview({
     >
       {/* Keep one stable media host so video/canvas are never remounted when a frame is chosen. */}
       <div
+        ref={hostRef}
         className="relative overflow-hidden"
         style={
           aspect

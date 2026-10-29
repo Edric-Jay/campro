@@ -9,9 +9,14 @@ describe("still orientation", () => {
   });
 
   it("lets a locked print orientation win over the viewfinder", () => {
-    expect(resolveCaptureOrientation("landscape", { clientWidth: 400, clientHeight: 800 })).toBe("landscape");
-    expect(resolveCaptureOrientation("portrait", { clientWidth: 800, clientHeight: 400 })).toBe("portrait");
-    expect(resolveCaptureOrientation("auto", { clientWidth: 800, clientHeight: 400 })).toBe("landscape");
+    expect(resolveCaptureOrientation("landscape", "portrait")).toBe("landscape");
+    expect(resolveCaptureOrientation("portrait", "landscape")).toBe("portrait");
+  });
+
+  it("lets Auto follow the live preview facing", () => {
+    expect(resolveCaptureOrientation("auto", "landscape")).toBe("landscape");
+    expect(resolveCaptureOrientation("auto", "portrait")).toBe("portrait");
+    expect(resolveCaptureOrientation("auto", null, { clientWidth: 800, clientHeight: 400 })).toBe("landscape");
   });
 
   it("keeps landscape-right stills upright when the aspect already matches", () => {
