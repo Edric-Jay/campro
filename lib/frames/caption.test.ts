@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { anchorStyle, captionBand, isCaptionFrame, normalizeCaption } from "./caption";
+import {
+  anchorStyle,
+  captionBand,
+  captionFontPx,
+  captionPreviewFontPx,
+  isCaptionFrame,
+  normalizeCaption,
+} from "./caption";
 import { frameLayout } from "./film";
 
 describe("print captions", () => {
@@ -50,5 +57,19 @@ describe("print captions", () => {
       x: 0,
       y: 1,
     });
+  });
+
+  it("scales preview font to match the baked print size", () => {
+    const layout = frameLayout("instax", "portrait");
+    expect(layout).not.toBeNull();
+    if (!layout) return;
+    const band = captionBand(layout);
+    const naturalW = 1200;
+    const naturalH = 1600;
+    const displayW = 300;
+    const scale = 1.2;
+    const baked = captionFontPx(band.width * naturalW, band.height * naturalH, scale);
+    const preview = captionPreviewFontPx(naturalW, naturalH, band, displayW, scale);
+    expect(preview).toBeCloseTo(baked * (displayW / naturalW), 5);
   });
 });

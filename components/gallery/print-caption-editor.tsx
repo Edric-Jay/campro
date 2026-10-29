@@ -10,6 +10,8 @@ import {
   CAPTION_SIZE_MAX,
   CAPTION_SIZE_MIN,
   captionBand,
+  captionBandPad,
+  captionPreviewFontPx,
   clamp01,
   fontById,
   HANDWRITING_FONTS,
@@ -46,6 +48,7 @@ export function PrintCaptionEditor({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [natural, setNatural] = useState({ width: 0, height: 0 });
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const draggingRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -59,7 +62,15 @@ export function PrintCaptionEditor({
     const base = record.printBase ?? record.graded;
     const url = URL.createObjectURL(base);
     setBaseUrl(url);
-    return () => URL.revokeObjectURL(url);
+    let cancelled = false;
+    void createImageBitmap(base).then((bitmap) => {
+      if (!cancelled) setNatural({ width: bitmap.width, height: bitmap.height });
+      bitmap.close();
+    });
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
   }, [record.id, record.printBase, record.graded]);
 
   useEffect(() => {
@@ -74,9 +85,18 @@ export function PrintCaptionEditor({
 
   const band = useMemo(() => {
     if (!editable || !frameId || size.width < 2) return null;
-    const layout = frameLayout(frameId, resolveOrientation(orientation as FrameOrientation, size.width, size.height));
+    const facingW = natural.width > 0 ? natural.width : size.width;
+    const facingH = natural.height > 0 ? natural.height : size.height;
+    const layout = frameLayout(frameId, resolveOrientation(orientation as FrameOrientation, facingW, facingH));
     return layout ? captionBand(layout) : null;
-  }, [editable, frameId, orientation, size.height, size.width]);
+  }, [editable, frameId, natural.height, natural.width, orientation, size.height, size.width]);
+
+  const pad = useMemo(() => (band ? captionBandPad(band) : null), [band]);
+
+  const previewPx = useMemo(() => {
+    if (!band || size.width < 2) return 16;
+    return captionPreviewFontPx(natural.width, natural.height, band, size.width, draft.size);
+  }, [band, draft.size, natural.height, natural.width, size.width]);
 
   if (!editable || !frameId) return null;
 
@@ -194,7 +214,6 @@ export function PrintCaptionEditor({
   const place = freehand
     ? { left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, transform: "translate(-50%, -50%)", textAlign: "center" as const }
     : anchorStyle(draft.anchor);
-  const previewPx = Math.round(18 * draft.size);
   const dateLabel = draft.includeDate
     ? new Date(record.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
     : "";
@@ -210,37 +229,45 @@ export function PrintCaptionEditor({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={baseUrl} alt="" className="pointer-events-none block w-full select-none" draggable={false} />
         ) : null}
-        {band ? (
+        {band && pad ? (
           <div
-            ref={bandRef}
-            className={`absolute border border-dashed border-sage/40 bg-sage/5 ${
-              freehand ? "cursor-grab touch-none active:cursor-grabbing" : "pointer-events-none"
-            }`}
+            className="pointer-events-none absolute border border-dashed border-sage/40 bg-sage/5"
             style={{
               left: `${band.left * 100}%`,
               top: `${band.top * 100}%`,
               width: `${band.width * 100}%`,
               height: `${band.height * 100}%`,
             }}
-            onPointerDown={onBandPointerDown}
-            onPointerMove={onBandPointerMove}
-            onPointerUp={onBandPointerUp}
-            onPointerCancel={onBandPointerUp}
           >
             <div
-              className={`absolute max-w-[92%] px-2 text-[#2a2824] ${freehand ? "pointer-events-none select-none" : ""}`}
+              ref={bandRef}
+              className={`absolute ${freehand ? "pointer-events-auto cursor-grab touch-none active:cursor-grabbing" : "pointer-events-none"}`}
               style={{
-                left: place.left,
-                top: place.top,
-                transform: place.transform,
-                textAlign: place.textAlign,
-                fontFamily: font.css,
-                fontSize: `${Math.max(12, Math.min(42, previewPx))}px`,
-                lineHeight: 1.15,
+                left: `${pad.x * 100}%`,
+                top: `${pad.y * 100}%`,
+                width: `${(1 - pad.x * 2) * 100}%`,
+                height: `${(1 - pad.y * 2) * 100}%`,
               }}
+              onPointerDown={onBandPointerDown}
+              onPointerMove={onBandPointerMove}
+              onPointerUp={onBandPointerUp}
+              onPointerCancel={onBandPointerUp}
             >
-              {draft.text.trim() || "Your note"}
-              {dateLabel ? <span className="mt-0.5 block text-[0.75em] opacity-80">{dateLabel}</span> : null}
+              <div
+                className={`absolute max-w-full text-[#2a2824] ${freehand ? "pointer-events-none select-none" : ""}`}
+                style={{
+                  left: place.left,
+                  top: place.top,
+                  transform: place.transform,
+                  textAlign: place.textAlign,
+                  fontFamily: font.css,
+                  fontSize: `${previewPx}px`,
+                  lineHeight: 1.2,
+                }}
+              >
+                {draft.text.trim() || "Your note"}
+                {dateLabel ? <span className="mt-0 block opacity-90">{dateLabel}</span> : null}
+              </div>
             </div>
           </div>
         ) : null}

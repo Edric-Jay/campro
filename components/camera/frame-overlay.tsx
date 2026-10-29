@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { imageWindowAspect, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
+import { currentViewOrientation } from "@/lib/camera/orientation";
+import { imageWindowAspect, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 
 function readBox(node: HTMLElement) {
   const rect = node.getBoundingClientRect();
@@ -56,9 +57,12 @@ export function AspectPreview({
     };
   }, [frameId, clearChrome]);
 
-  const fallbackW = typeof window !== "undefined" ? window.innerWidth : 3;
-  const fallbackH = typeof window !== "undefined" ? window.innerHeight : 4;
-  const screenOrientation = resolveOrientation("auto", box.width || fallbackW, box.height || fallbackH);
+  const screenOrientation =
+    box.width > 2 && box.height > 2
+      ? box.width >= box.height
+        ? "landscape"
+        : "portrait"
+      : currentViewOrientation();
   const aspect = frameId === "none" ? null : imageWindowAspect(frameId, screenOrientation);
 
   return (

@@ -9,6 +9,11 @@ import { canvasToJpeg } from "@/lib/lut/renderer";
 import { applyFilmFrame, FRAMES } from "@/lib/frames/film";
 import { trackConstraintsFor } from "@/lib/camera/constraints";
 import { viewPointToSensor } from "@/lib/camera/geometry";
+import {
+  currentViewOrientation,
+  normalizeStillToOrientation,
+  resolvePrintOrientation,
+} from "@/lib/camera/orientation";
 import { buildStillOptions } from "@/lib/camera/still-options";
 import { exposureSummary } from "@/lib/camera/summary";
 import { shutterById } from "@/lib/camera/stops";
@@ -45,7 +50,7 @@ function wbLabel(settings: AppSettings, level: string | undefined) {
 }
 
 async function downscaleJpeg(blob: Blob, maxEdge = 360) {
-  const bitmap = await createImageBitmap(blob);
+  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   try {
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
@@ -62,7 +67,7 @@ async function downscaleJpeg(blob: Blob, maxEdge = 360) {
 
 async function ensureJpeg(blob: Blob) {
   if (blob.type === "image/jpeg") return blob;
-  const bitmap = await createImageBitmap(blob);
+  const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
   const canvas = document.createElement("canvas");
   canvas.width = bitmap.width;
   canvas.height = bitmap.height;
@@ -214,8 +219,12 @@ export function CameraShell() {
     if (!camera.probe || !lut) throw new Error("The camera is not ready.");
     const stillOptions = buildStillOptions(settings, camera.probe);
     const original = await camera.captureOriginal(stillOptions);
+    const viewFacing = currentViewOrientation();
+    const printOrientation = resolvePrintOrientation(settings.frameOrientation);
     let graded: Blob;
     let gradedNote: string;
+    let stillWidth = original.width;
+    let stillHeight = original.height;
     if (view.kind === "none" || !view.rendererRef.current) {
       graded = await ensureJpeg(original.blob);
       gradedNote = "Look was not applied because WebGL is unavailable. The saved JPEG is ungraded.";
@@ -229,30 +238,25 @@ export function CameraShell() {
           wbGains: gains,
           crop: { u0: 0, v0: 0, u1: 1, v1: 1 },
         });
+        stillWidth = bitmap.width;
+        stillHeight = bitmap.height;
       } finally {
         bitmap.close();
       }
       gradedNote =
         "Graded JPEG from the captured frame. This is not a RAW file. The viewfinder crop is not baked into the file.";
-      if (settings.frameId !== "none") {
-        const facing =
-          settings.frameOrientation === "auto"
-            ? window.innerWidth >= window.innerHeight
-              ? "landscape"
-              : "portrait"
-            : settings.frameOrientation;
-        graded = await applyFilmFrame(graded, settings.frameId, facing);
-        const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
-        gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${facing} orientation.`;
-      }
+    }
+    // Phone cameras often keep sensor pixels while the UI rotates; match the held orientation.
+    const oriented = await normalizeStillToOrientation(graded, viewFacing);
+    graded = oriented.blob;
+    stillWidth = oriented.width;
+    stillHeight = oriented.height;
+    if (settings.frameId !== "none") {
+      graded = await applyFilmFrame(graded, settings.frameId, printOrientation);
+      const frameName = FRAMES.find((frame) => frame.id === settings.frameId)?.name ?? settings.frameId;
+      gradedNote = `${gradedNote} Printed with the ${frameName} frame after capture, ${printOrientation} orientation.`;
     }
     const framed = settings.frameId !== "none";
-    const printOrientation =
-      settings.frameOrientation === "auto"
-        ? window.innerWidth >= window.innerHeight
-          ? "landscape"
-          : "portrait"
-        : settings.frameOrientation;
     const thumbnail = await downscaleJpeg(graded);
     const record: CaptureRecord = {
       id: crypto.randomUUID(),
@@ -268,8 +272,8 @@ export function CameraShell() {
       thumbnail,
       originalSource: original.source,
       metadata: {
-        width: original.width,
-        height: original.height,
+        width: stillWidth,
+        height: stillHeight,
         facingMode: settings.facingMode,
         trackSettings: original.trackSettings,
         stillOptions: original.stillOptions,

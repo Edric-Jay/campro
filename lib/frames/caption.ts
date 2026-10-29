@@ -130,6 +130,29 @@ export function captionFontPx(bandW: number, bandH: number, sizeScale: number) {
   return Math.max(12, base * sizeScale);
 }
 
+/** CSS px that matches the baked print when shown at `displayWidth`. */
+export function captionPreviewFontPx(
+  naturalWidth: number,
+  naturalHeight: number,
+  band: CaptionBand,
+  displayWidth: number,
+  sizeScale: number,
+) {
+  if (naturalWidth < 1 || naturalHeight < 1 || displayWidth < 1) {
+    return captionFontPx(band.width * Math.max(displayWidth, 1), band.height * Math.max(displayWidth, 1), sizeScale);
+  }
+  const baked = captionFontPx(band.width * naturalWidth, band.height * naturalHeight, sizeScale);
+  return baked * (displayWidth / naturalWidth);
+}
+
+/** Inner padding of the caption band, as fractions of band width/height (matches bake). */
+export function captionBandPad(band: CaptionBand) {
+  const bandW = Math.max(band.width, 1e-6);
+  const bandH = Math.max(band.height, 1e-6);
+  const pad = Math.min(bandW, bandH) * 0.1;
+  return { x: pad / bandW, y: pad / bandH };
+}
+
 export function anchorStyle(anchor: CaptionAnchor): {
   left: string;
   top: string;

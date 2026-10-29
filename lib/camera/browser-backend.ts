@@ -203,7 +203,7 @@ export class BrowserCameraBackend {
       try {
         const blob = await this.capture.takePhoto(stillOptions);
         if (blob.size > 0) {
-          const bitmap = await createImageBitmap(blob);
+          const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
           const size = { width: bitmap.width, height: bitmap.height };
           bitmap.close();
           return { blob, ...size, source: "image-capture", stillOptions, trackSettings };
