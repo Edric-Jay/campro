@@ -88,3 +88,48 @@ export function FocusIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function AnchorIcon({
+  anchor,
+  ...props
+}: IconProps & {
+  anchor:
+    | "top-left"
+    | "top-center"
+    | "top-right"
+    | "center-left"
+    | "center"
+    | "center-right"
+    | "bottom-left"
+    | "bottom-center"
+    | "bottom-right";
+}) {
+  const x = anchor.endsWith("left") ? 7 : anchor.endsWith("right") ? 17 : 12;
+  const y = anchor.startsWith("top") ? 7 : anchor.startsWith("bottom") ? 17 : 12;
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <circle cx={x} cy={y} r="2.4" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+export function TextSizeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 18V8h3l5 10h3" />
+      <path d="M7.5 14h5" />
+      <path d="M15 18V10h2l3 8h-2" />
+    </Icon>
+  );
+}
+
+export function FreehandIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 16l8-8" />
+      <path d="M14 6l4 4" />
+      <path d="M5 19l2.5-1L17 8.5 14.5 6 5 16.5Z" />
+    </Icon>
+  );
+}

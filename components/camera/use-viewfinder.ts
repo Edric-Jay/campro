@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { analyzeFrame, type AnalysisOptions, type FrameAnalysis } from "@/lib/analysis/frame";
 import type { Rgb } from "@/lib/lut/color";
@@ -17,7 +17,7 @@ export interface ViewDraw {
 }
 
 export function useViewfinder(videoRef: RefObject<HTMLVideoElement | null>, lut: Lut3D | null) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<LutRenderer | null>(null);
   const drawRef = useRef<ViewDraw>({
     intensity: 1,
@@ -29,9 +29,15 @@ export function useViewfinder(videoRef: RefObject<HTMLVideoElement | null>, lut:
   });
   const lutRef = useRef(lut);
   lutRef.current = lut;
+  const [surface, setSurface] = useState(0);
   const [kind, setKind] = useState<WebGlKind>("none");
   const [analysis, setAnalysis] = useState<FrameAnalysis | null>(null);
   const [slow, setSlow] = useState(false);
+
+  const setCanvasRef = useCallback((node: HTMLCanvasElement | null) => {
+    canvasRef.current = node;
+    if (node) setSurface((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,11 +114,11 @@ export function useViewfinder(videoRef: RefObject<HTMLVideoElement | null>, lut:
       renderer.destroy();
       rendererRef.current = null;
     };
-  }, [videoRef]);
+  }, [videoRef, surface]);
 
   useEffect(() => {
     if (lut) rendererRef.current?.setLut(lut);
   }, [lut]);
 
-  return { canvasRef, rendererRef, drawRef, kind, analysis, slow };
+  return { canvasRef, bindCanvas: setCanvasRef, rendererRef, drawRef, kind, analysis, slow };
 }

@@ -485,7 +485,7 @@ export function CameraShell() {
             data-testid="camera-video"
             className={view.kind === "none" ? "absolute inset-0 h-full w-full object-cover" : "pointer-events-none absolute inset-0 h-full w-full object-cover opacity-0"}
           />
-          <canvas ref={view.canvasRef} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
+          <canvas ref={view.bindCanvas} data-testid="viewfinder" className={view.kind === "none" ? "hidden" : "absolute inset-0 h-full w-full"} />
           <OverlayLayer
             settings={settings}
             analysis={view.analysis}

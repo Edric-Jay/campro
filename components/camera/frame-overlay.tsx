@@ -39,7 +39,6 @@ export function AspectPreview({
     const screenOrientation = window.screen?.orientation;
     screenOrientation?.addEventListener("change", measure);
 
-    // Some mobile browsers fire orientationchange before layout settles.
     const afterRotate = () => {
       measure();
       window.setTimeout(measure, 50);
@@ -57,8 +56,6 @@ export function AspectPreview({
     };
   }, [frameId, clearChrome]);
 
-  // Preview always follows the live screen shape so rotating the phone updates the crop.
-  // Portrait / Landscape in settings only locks the print when capturing.
   const fallbackW = typeof window !== "undefined" ? window.innerWidth : 3;
   const fallbackH = typeof window !== "undefined" ? window.innerHeight : 4;
   const screenOrientation = resolveOrientation("auto", box.width || fallbackW, box.height || fallbackH);
@@ -71,20 +68,20 @@ export function AspectPreview({
         clearChrome ? "inset-x-0 top-[var(--cam-top)] bottom-[var(--cam-bottom)]" : "inset-0"
       }`}
     >
-      {aspect ? (
-        <div
-          key={`${screenOrientation}-${aspect.toFixed(3)}`}
-          className="relative overflow-hidden"
-          style={{
-            width: `min(100cqw, calc(100cqh * ${aspect}))`,
-            height: `min(100cqh, calc(100cqw / ${aspect}))`,
-          }}
-        >
-          {children}
-        </div>
-      ) : (
-        <div className="relative h-full w-full overflow-hidden">{children}</div>
-      )}
+      {/* Keep one stable media host so video/canvas are never remounted when a frame is chosen. */}
+      <div
+        className="relative overflow-hidden"
+        style={
+          aspect
+            ? {
+                width: `min(100cqw, calc(100cqh * ${aspect}))`,
+                height: `min(100cqh, calc(100cqw / ${aspect}))`,
+              }
+            : { width: "100%", height: "100%" }
+        }
+      >
+        {children}
+      </div>
       {orientation !== "auto" && frameId !== "none" ? (
         <p className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-full bg-ink/70 px-2 py-1 font-mono text-[9px] tracking-widest text-paper/70 uppercase">
           Preview follows phone · print locked {orientation}

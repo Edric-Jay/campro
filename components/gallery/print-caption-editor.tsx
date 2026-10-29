@@ -2,23 +2,35 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  anchorStyle,
+  anchorToPoint,
   bakePrintCaption,
+  CAPTION_ANCHORS,
+  CAPTION_SIZE_DEFAULT,
+  CAPTION_SIZE_MAX,
+  CAPTION_SIZE_MIN,
   captionBand,
+  clamp01,
   fontById,
   HANDWRITING_FONTS,
   isCaptionFrame,
+  normalizeCaption,
+  type CaptionAnchor,
+  type CaptionPlacement,
   type PrintCaption,
 } from "@/lib/frames/caption";
 import { frameLayout, resolveOrientation, type FrameId, type FrameOrientation } from "@/lib/frames/film";
 import type { CaptureRecord } from "@/lib/storage/records";
+import { AnchorIcon, FreehandIcon, TextSizeIcon } from "@/components/camera/icons";
 
-const DEFAULT_CAPTION: PrintCaption = {
+const DEFAULT_CAPTION = normalizeCaption({
   text: "",
   fontId: "caveat",
   includeDate: true,
-  x: 0.5,
-  y: 0.55,
-};
+  placement: "anchor",
+  anchor: "bottom-center",
+  size: CAPTION_SIZE_DEFAULT,
+});
 
 export function PrintCaptionEditor({
   record,
@@ -30,16 +42,17 @@ export function PrintCaptionEditor({
   const frameId = record.metadata.frameId;
   const orientation = record.metadata.frameOrientation ?? "auto";
   const editable = record.kind === "photo" && isCaptionFrame(frameId);
-  const [draft, setDraft] = useState<PrintCaption>(record.metadata.caption ?? DEFAULT_CAPTION);
+  const [draft, setDraft] = useState<PrintCaption>(normalizeCaption(record.metadata.caption));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const draggingRef = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
+  const bandRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setDraft(record.metadata.caption ?? DEFAULT_CAPTION);
+    setDraft(normalizeCaption(record.metadata.caption));
   }, [record.id, record.metadata.caption]);
 
   useEffect(() => {
@@ -67,38 +80,45 @@ export function PrintCaptionEditor({
 
   if (!editable || !frameId) return null;
 
-  function moveTo(clientX: number, clientY: number) {
-    const node = stageRef.current;
-    if (!node || !band) return;
+  function setPlacement(placement: CaptionPlacement) {
+    setDraft((current) => {
+      if (placement === "freehand" && current.placement !== "freehand") {
+        const point = anchorToPoint(current.anchor);
+        return { ...current, placement, x: point.x, y: point.y };
+      }
+      return { ...current, placement };
+    });
+  }
+
+  function moveFreehand(clientX: number, clientY: number) {
+    const node = bandRef.current;
+    if (!node) return;
     const rect = node.getBoundingClientRect();
-    const px = (clientX - rect.left) / rect.width;
-    const py = (clientY - rect.top) / rect.height;
-    const x = (px - band.left) / band.width;
-    const y = (py - band.top) / band.height;
+    if (rect.width < 1 || rect.height < 1) return;
     setDraft((current) => ({
       ...current,
-      x: Math.min(1, Math.max(0, x)),
-      y: Math.min(1, Math.max(0, y)),
+      x: clamp01((clientX - rect.left) / rect.width),
+      y: clamp01((clientY - rect.top) / rect.height),
     }));
   }
 
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!band) return;
-    dragging.current = true;
+  function onBandPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (draft.placement !== "freehand") return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    moveTo(event.clientX, event.clientY);
+    draggingRef.current = true;
+    moveFreehand(event.clientX, event.clientY);
   }
 
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragging.current) return;
-    moveTo(event.clientX, event.clientY);
+  function onBandPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!draggingRef.current || draft.placement !== "freehand") return;
+    moveFreehand(event.clientX, event.clientY);
   }
 
-  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
-    dragging.current = false;
+  function onBandPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    draggingRef.current = false;
   }
 
   async function apply() {
@@ -170,6 +190,11 @@ export function PrintCaptionEditor({
   }
 
   const font = fontById(draft.fontId);
+  const freehand = draft.placement === "freehand";
+  const place = freehand
+    ? { left: `${draft.x * 100}%`, top: `${draft.y * 100}%`, transform: "translate(-50%, -50%)", textAlign: "center" as const }
+    : anchorStyle(draft.anchor);
+  const previewPx = Math.round(18 * draft.size);
   const dateLabel = draft.includeDate
     ? new Date(record.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
     : "";
@@ -178,37 +203,39 @@ export function PrintCaptionEditor({
     <section className="flex flex-col gap-3 rounded-xl border border-paper/10 bg-panel p-3">
       <div>
         <p className="font-mono text-[10px] tracking-[0.16em] text-paper/55 uppercase">Write on print</p>
-        <p className="mt-1 text-xs text-paper/55">Drag the text on the white border. Handwriting is saved into the photo.</p>
+        <p className="mt-1 text-xs text-paper/55">Choose handwriting, size, and where the note sits on the white border.</p>
       </div>
-      <div
-        ref={stageRef}
-        className="relative touch-none overflow-hidden bg-black"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
+      <div ref={stageRef} className="relative overflow-hidden bg-black">
         {baseUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={baseUrl} alt="" className="pointer-events-none block w-full select-none" draggable={false} />
         ) : null}
         {band ? (
           <div
-            className="pointer-events-none absolute border border-dashed border-sage/50 bg-sage/5"
+            ref={bandRef}
+            className={`absolute border border-dashed border-sage/40 bg-sage/5 ${
+              freehand ? "cursor-grab touch-none active:cursor-grabbing" : "pointer-events-none"
+            }`}
             style={{
               left: `${band.left * 100}%`,
               top: `${band.top * 100}%`,
               width: `${band.width * 100}%`,
               height: `${band.height * 100}%`,
             }}
+            onPointerDown={onBandPointerDown}
+            onPointerMove={onBandPointerMove}
+            onPointerUp={onBandPointerUp}
+            onPointerCancel={onBandPointerUp}
           >
             <div
-              className="absolute max-w-[90%] -translate-x-1/2 -translate-y-1/2 px-1 text-center text-[#2a2824]"
+              className={`absolute max-w-[92%] px-2 text-[#2a2824] ${freehand ? "pointer-events-none select-none" : ""}`}
               style={{
-                left: `${draft.x * 100}%`,
-                top: `${draft.y * 100}%`,
-                fontFamily: font.family,
-                fontSize: "clamp(14px, 4.2vw, 28px)",
+                left: place.left,
+                top: place.top,
+                transform: place.transform,
+                textAlign: place.textAlign,
+                fontFamily: font.css,
+                fontSize: `${Math.max(12, Math.min(42, previewPx))}px`,
                 lineHeight: 1.15,
               }}
             >
@@ -226,24 +253,102 @@ export function PrintCaptionEditor({
           rows={2}
           placeholder="Write something…"
           className="min-h-16 rounded-lg border border-paper/15 bg-ink px-3 py-2 text-sm text-paper"
-          style={{ fontFamily: font.family }}
+          style={{ fontFamily: font.css }}
           onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
         />
       </label>
-      <div className="flex flex-wrap gap-1.5">
-        {HANDWRITING_FONTS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-pressed={draft.fontId === item.id}
-            className={`min-h-9 rounded-full border px-3 text-sm ${draft.fontId === item.id ? "border-sage bg-paper text-ink" : "border-paper/15"}`}
-            style={{ fontFamily: item.family }}
-            onClick={() => setDraft((current) => ({ ...current, fontId: item.id }))}
-          >
-            {item.name}
-          </button>
-        ))}
+      <div>
+        <p className="mb-1.5 font-mono text-[10px] tracking-widest text-paper/45 uppercase">Handwriting</p>
+        <div className="flex flex-wrap gap-1.5">
+          {HANDWRITING_FONTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={draft.fontId === item.id}
+              className={`min-h-9 rounded-full border px-3 text-sm ${draft.fontId === item.id ? "border-sage bg-paper text-ink" : "border-paper/15"}`}
+              style={{ fontFamily: item.css }}
+              onClick={() => setDraft((current) => ({ ...current, fontId: item.id }))}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
       </div>
+      <div>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest text-paper/45 uppercase">
+            <TextSizeIcon className="h-3.5 w-3.5" />
+            Size
+          </p>
+          <span className="font-mono text-[10px] text-paper/55">{Math.round(draft.size * 100)}%</span>
+        </div>
+        <input
+          aria-label="Caption size"
+          type="range"
+          min={CAPTION_SIZE_MIN}
+          max={CAPTION_SIZE_MAX}
+          step={0.05}
+          value={draft.size}
+          className="h-8 w-full accent-sage"
+          onChange={(event) => setDraft((current) => ({ ...current, size: Number(event.target.value) }))}
+        />
+        <div className="mt-1 flex justify-between font-mono text-[10px] text-paper/40 uppercase">
+          <span>S</span>
+          <span>M</span>
+          <span>L</span>
+        </div>
+      </div>
+      <div>
+        <p className="mb-1.5 font-mono text-[10px] tracking-widest text-paper/45 uppercase">Place</p>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            aria-pressed={!freehand}
+            className={`flex min-h-10 items-center justify-center gap-2 rounded-full border text-sm ${
+              !freehand ? "border-sage bg-paper text-ink" : "border-paper/15"
+            }`}
+            onClick={() => setPlacement("anchor")}
+          >
+            <AnchorIcon anchor="center" className="h-4 w-4" />
+            Anchor
+          </button>
+          <button
+            type="button"
+            aria-pressed={freehand}
+            className={`flex min-h-10 items-center justify-center gap-2 rounded-full border text-sm ${
+              freehand ? "border-sage bg-paper text-ink" : "border-paper/15"
+            }`}
+            onClick={() => setPlacement("freehand")}
+          >
+            <FreehandIcon className="h-4 w-4" />
+            Freehand
+          </button>
+        </div>
+      </div>
+      {freehand ? (
+        <p className="text-xs text-paper/55">Drag the note on the white border to place it.</p>
+      ) : (
+        <div>
+          <p className="mb-1.5 font-mono text-[10px] tracking-widest text-paper/45 uppercase">Anchor</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {CAPTION_ANCHORS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-label={item.label}
+                aria-pressed={draft.anchor === item.id}
+                title={item.label}
+                className={`grid h-11 place-items-center rounded-md border ${
+                  draft.anchor === item.id ? "border-sage bg-paper text-ink" : "border-paper/15 text-paper/80"
+                }`}
+                onClick={() => setDraft((current) => ({ ...current, anchor: item.id as CaptionAnchor }))}
+              >
+                <AnchorIcon anchor={item.id} className="h-5 w-5" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
